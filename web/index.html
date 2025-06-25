@@ -194,7 +194,123 @@
             font-weight: bold;
             margin-bottom: 10px;
         }
+        /* Keep native controls for regular videos, hide timeline only for live streams */
+        .live-stream video::-webkit-media-controls-timeline {
+            display: none !important;
+        }
+        .live-stream video::-webkit-media-controls-current-time-display {
+            display: none !important;
+        }
+        .live-stream video::-webkit-media-controls-time-remaining-display {
+            display: none !important;
+        }
+        
+        /* For non-live streams, keep native controls visible */
+        video::-webkit-media-controls {
+            /* Keep all native controls for regular videos */
+        }
+        
         /* Timeline controls will be hidden dynamically only for live streams */
+        
+        .custom-controls {
+            position: absolute;
+            bottom: 60px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 15px;
+            opacity: 1;
+            z-index: 1000;
+            border-radius: 6px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .seek-slider {
+            width: 100%;
+            height: 4px;
+            margin-bottom: 8px;
+            background: transparent;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        .seek-slider::-webkit-slider-track {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+        }
+        
+        .seek-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #1e90ff;
+            border-radius: 50%;
+            cursor: grab;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .seek-slider::-webkit-slider-thumb:active {
+            cursor: grabbing;
+        }
+        
+        .seek-slider::-moz-range-track {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            border: none;
+        }
+        
+        .seek-slider::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            background: #1e90ff;
+            border-radius: 50%;
+            cursor: grab;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .time-display {
+            color: white;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .time-current-duration {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .time-separator {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .live-edge-button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 3px 6px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0.9;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .live-edge-button:hover {
+            opacity: 1;
+            transform: scale(1.05);
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -203,19 +319,40 @@
         <h1>🎬 StreamForge Multi-Quality Player</h1>
         
         <div class="stream-controls">
-            <div>
-                <input type="text" id="streamKey" placeholder="Stream Key (e.g., stream1)" value="stream1">
-                <button onclick="startTranscoding()">Start Transcoding</button>
-                <button onclick="stopTranscoding()">Stop Transcoding</button>
-                <button onclick="loadStream()">Load Stream</button>
-                <button onclick="refreshActiveStreams()">Refresh Active Streams</button>
+            <div style="margin-bottom: 15px;">
+                <select id="availableStreams" onchange="selectStream()" style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-right: 10px;">
+                    <option value="">Select Active Stream...</option>
+                </select>
+                <button onclick="loadSelectedStream()" style="background-color: #28a745;">🎬 Load Stream</button>
+                <button onclick="startTranscoding()" style="background-color: #17a2b8;">▶️ Start Transcoding</button>
+                <button onclick="stopTranscoding()" style="background-color: #dc3545;">⏹️ Stop Transcoding</button>
+                <button onclick="refreshActiveStreams()" style="background-color: #6c757d;">🔄 Refresh</button>
             </div>
         </div>
         
+        <input type="hidden" id="streamKey" value="stream1">
+        
         <div class="video-container">
-            <video id="video" controls>
+            <video id="video" controls controlsList="nodownload nofullscreen noremoteplayback">
                 Your browser does not support the video tag.
             </video>
+            
+            <div class="custom-controls" id="customControls">
+                <input type="range" id="seekSlider" min="0" max="7200" value="0" step="1" class="seek-slider">
+                <div class="time-display">
+                    <div class="time-current-duration">
+                        <span id="currentTime">0:00</span>
+                        <span class="time-separator">/</span>
+                        <span id="duration">0:00</span>
+                    </div>
+                    <div>
+                        <button class="live-edge-button" id="liveEdgeBtn" onclick="goToLiveEdge()" style="display: none;">
+                            🔴 GO LIVE
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <div id="qualityInfo" class="quality-info" style="display: none;">
                 <div><strong>Current Quality:</strong> <span id="currentQuality">-</span></div>
                 <div><strong>Resolution:</strong> <span id="currentResolution">-</span></div>
@@ -253,8 +390,10 @@
         </div>
         
         <div class="active-streams">
-            <h3>Active Transcoders</h3>
-            <div id="activeStreams"></div>
+            <h3>🔴 Active Transcoders <small style="font-weight: normal; color: #6c757d;">(Also available in dropdown above)</small></h3>
+            <div id="activeStreams" style="max-height: 200px; overflow-y: auto;">
+                <div class="stream-item">Loading active streams...</div>
+            </div>
         </div>
     </div>
 
@@ -263,6 +402,12 @@
         let currentStreamKey = '';
         let debugEnabled = false;
         let debugLog = [];
+        let isSeekingManually = false;
+        let liveEdgeThreshold = 5; // seconds from live edge to show "GO LIVE" button
+        let isLiveStream = false;
+        let isDragging = false;
+        let streamStartTime = null; // Track when stream started
+        let dvrWindowSize = 3600; // 60 minutes DVR window
 
         function addDebugLog(message) {
             if (!debugEnabled) return;
@@ -414,19 +559,19 @@
                 hls = new Hls({
                     debug: false,
                     enableWorker: true,
-                    lowLatencyMode: true,
-                    maxBufferLength: 10,
-                    maxMaxBufferLength: 20,
-                    backBufferLength: 10,
-                    liveBackBufferLength: 3,
-                    liveSyncDurationCount: 2,
-                    liveMaxLatencyDurationCount: 5,
+                    lowLatencyMode: false, // Disable for better buffering
+                    maxBufferLength: 300, // 5 minutes of buffer
+                    maxMaxBufferLength: 600, // 10 minutes max buffer
+                    backBufferLength: 1800, // Keep 30 minutes of back buffer for seeking
+                    liveBackBufferLength: 1800, // 30 minutes of live back buffer
+                    liveSyncDurationCount: 3,
+                    liveMaxLatencyDurationCount: 10,
                     liveDurationInfinity: true,
                     enableLiveAsLive: true,
                     startLevel: -1, // Auto-select starting quality
                     capLevelToPlayerSize: false, // Disable auto size-based selection
-                    maxFragLookUpTolerance: 0.1,
-                    maxSeekHole: 2,
+                    maxFragLookUpTolerance: 2.0,
+                    maxSeekHole: 10,
                     abrEwmaDefaultEstimate: 500000, // Conservative bandwidth estimate
                     abrEwmaSlowVoD: 3,
                     abrEwmaFastVoD: 3,
@@ -436,8 +581,8 @@
                     abrMaxWithRealBitrate: false,
                     abrBandWidthFactor: 0.1, // Very low to prevent upscaling
                     abrBandWidthUpFactor: 0.1,
-                    maxStarvationDelay: 0.5,
-                    maxLoadingDelay: 0.5
+                    maxStarvationDelay: 2.0,
+                    maxLoadingDelay: 2.0
                 });
                 
                 hls.loadSource(streamUrl);
@@ -469,18 +614,18 @@
                     
                     // Show LIVE indicator and manage live streaming
                     const liveIndicator = document.getElementById('liveIndicator');
+                    const videoContainer = document.querySelector('.video-container');
+                    
                     if (data.live || streamUrl.includes('master.m3u8')) {
+                        isLiveStream = true;
+                        // Don't reset streamStartTime if stream is already running
+                        if (!streamStartTime) {
+                            streamStartTime = Date.now() / 1000; // Record stream start time
+                        }
                         liveIndicator.style.display = 'block';
+                        videoContainer.classList.add('live-stream');
                         
-                        // Hide video timeline controls ONLY for live streams
-                        const style = document.createElement('style');
-                        style.id = 'liveStreamStyles';
-                        style.innerHTML = `
-                            video::-webkit-media-controls-timeline { display: none !important; }
-                            video::-webkit-media-controls-current-time-display { display: none !important; }
-                            video::-webkit-media-controls-time-remaining-display { display: none !important; }
-                        `;
-                        document.head.appendChild(style);
+                        // Live stream specific behavior (timeline already hidden globally)
                         
                         // Start close to live edge but allow some buffer
                         video.addEventListener('canplay', function() {
@@ -490,15 +635,15 @@
                             }
                         }, { once: true });
                         
-                        addDebugLog('Stream detected as LIVE');
+                        addDebugLog('Stream detected as LIVE - DVR window enabled');
                     } else {
+                        isLiveStream = false;
                         liveIndicator.style.display = 'none';
-                        // Remove live stream styles if they exist (for VOD content)
-                        const existingStyle = document.getElementById('liveStreamStyles');
-                        if (existingStyle) {
-                            existingStyle.remove();
-                        }
+                        videoContainer.classList.remove('live-stream');
                     }
+                    
+                    // Initialize seeking events for this stream
+                    bindSeekingEvents();
                 });
                 
                 // Bind all HLS events
@@ -662,25 +807,25 @@
                         hls = new Hls({
                             debug: false,
                             enableWorker: true,
-                            lowLatencyMode: true,
-                            maxBufferLength: 5, // Smaller buffer for faster switching
-                            maxMaxBufferLength: 10,
-                            backBufferLength: 5,
-                            liveBackBufferLength: 2,
-                            liveSyncDurationCount: 2,
-                            liveMaxLatencyDurationCount: 5,
+                            lowLatencyMode: false, // Disable for better buffering
+                            maxBufferLength: 300, // 5 minutes of buffer
+                            maxMaxBufferLength: 600, // 10 minutes max buffer
+                            backBufferLength: 1800, // Keep 30 minutes of back buffer for seeking
+                            liveBackBufferLength: 1800, // 30 minutes of live back buffer
+                            liveSyncDurationCount: 3,
+                            liveMaxLatencyDurationCount: 10,
                             liveDurationInfinity: true,
                             enableLiveAsLive: true,
                             startLevel: actualLevelIndex, // Force starting at selected level
                             capLevelToPlayerSize: false,
-                            maxFragLookUpTolerance: 0.1,
-                            maxSeekHole: 2,
+                            maxFragLookUpTolerance: 2.0,
+                            maxSeekHole: 10,
                             abrEwmaDefaultEstimate: 100000, // Very low bandwidth estimate
                             abrMaxWithRealBitrate: false,
                             abrBandWidthFactor: 0.01, // Extremely low to prevent upscaling
                             abrBandWidthUpFactor: 0.01,
-                            maxStarvationDelay: 0.1,
-                            maxLoadingDelay: 0.1
+                            maxStarvationDelay: 2.0,
+                            maxLoadingDelay: 2.0
                         });
                         
                         // Reload with the selected level forced
@@ -744,31 +889,348 @@
             }
         }
 
+        function selectAndLoadStream() {
+            const dropdown = document.getElementById('availableStreams');
+            const selectedStream = dropdown.value;
+            
+            if (selectedStream) {
+                document.getElementById('streamKey').value = selectedStream;
+                showStatus(`📺 Loading stream: ${selectedStream}...`, 'info');
+                loadStream();
+            } else {
+                showStatus('⚠️ Please select a stream from the dropdown', 'error');
+            }
+        }
+
+        function selectStream() {
+            const dropdown = document.getElementById('availableStreams');
+            const selectedStream = dropdown.value;
+            
+            if (selectedStream) {
+                document.getElementById('streamKey').value = selectedStream;
+                showStatus(`📺 Selected stream: ${selectedStream}`, 'info');
+            }
+        }
+
+        function loadSelectedStream() {
+            selectAndLoadStream();
+        }
+
         async function refreshActiveStreams() {
+            showStatus('🔄 Refreshing active streams...', 'info');
+            
             try {
                 const response = await fetch('/proxy/transcode/active');
                 const data = await response.json();
                 
-                const activeList = document.getElementById('activeStreamsList');
-                if (data.streams && data.streams.length > 0) {
-                    activeList.innerHTML = data.streams.map(stream => 
+                const activeList = document.getElementById('activeStreams');
+                const dropdown = document.getElementById('availableStreams');
+                const streams = data.data || data.streams || [];
+                
+                if (streams && streams.length > 0) {
+                    // Update the list display
+                    activeList.innerHTML = streams.map(stream => 
                         `<div class="stream-item">
-                            <strong>${stream.stream_key}</strong> - ${stream.status} 
-                            <small>(${stream.uptime})</small>
+                            <strong>📺 ${stream.stream_key}</strong> - 
+                            <span style="color: #28a745; font-weight: bold;">${stream.status}</span> 
+                            <small style="color: #6c757d;">(${stream.uptime})</small>
+                            <br><small>🎯 ${stream.quality_count} qualities • PID: ${stream.pid}</small>
                         </div>`
                     ).join('');
+                    
+                    // Update the dropdown
+                    const currentValue = dropdown.value;
+                    dropdown.innerHTML = '<option value="">Select Active Stream...</option>' +
+                        streams.map(stream => 
+                            `<option value="${stream.stream_key}" ${currentValue === stream.stream_key ? 'selected' : ''}>
+                                📺 ${stream.stream_key} (${stream.status} - ${stream.uptime})
+                            </option>`
+                        ).join('');
+                    
+                    // Auto-select first stream if none is selected
+                    if (!currentValue && streams.length > 0) {
+                        dropdown.value = streams[0].stream_key;
+                        document.getElementById('streamKey').value = streams[0].stream_key;
+                    }
+                    
+                    showStatus(`✅ Found ${streams.length} active stream(s)`, 'success');
                 } else {
-                    activeList.innerHTML = '<div class="stream-item">No active streams</div>';
+                    activeList.innerHTML = '<div class="stream-item">📭 No active streams</div>';
+                    dropdown.innerHTML = '<option value="">No Active Streams</option>';
+                    showStatus('ℹ️ No active streams found', 'info');
                 }
             } catch (error) {
                 console.log('Could not fetch active streams:', error);
-                document.getElementById('activeStreamsList').innerHTML = 
-                    '<div class="stream-item">Unable to load active streams</div>';
+                document.getElementById('activeStreams').innerHTML = 
+                    '<div class="stream-item">❌ Unable to load active streams</div>';
+                document.getElementById('availableStreams').innerHTML = 
+                    '<option value="">Error Loading Streams</option>';
+                showStatus('❌ Failed to refresh active streams', 'error');
             }
+        }
+
+        // Seeking and timeline functions
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateTimeDisplay() {
+            const video = document.getElementById('video');
+            if (!video) return;
+
+            const currentTime = video.currentTime || 0;
+            let duration = video.duration;
+            
+            const seekSlider = document.getElementById('seekSlider');
+            
+            // Handle live streams - create a DVR-style timeline
+            if (isLiveStream) {
+                // Show slider position when user is manually seeking, otherwise show video time
+                const displayTime = (isDragging || isSeekingManually) ? parseFloat(seekSlider.value) : currentTime;
+                document.getElementById('currentTime').textContent = formatTime(displayTime);
+                document.getElementById('duration').textContent = "LIVE";
+                
+                // Get REAL seekable range from video element
+                let seekableStart = 0;
+                let seekableEnd = currentTime;
+                let actualDvrWindow = 0;
+                
+                if (video.seekable && video.seekable.length > 0) {
+                    // Use the actual seekable range from the video
+                    seekableStart = video.seekable.start(0);
+                    seekableEnd = video.seekable.end(video.seekable.length - 1);
+                    actualDvrWindow = seekableEnd - seekableStart;
+                } else if (video.buffered && video.buffered.length > 0) {
+                    // Fallback to buffered range
+                    seekableStart = video.buffered.start(0);
+                    seekableEnd = video.buffered.end(video.buffered.length - 1);
+                    actualDvrWindow = seekableEnd - seekableStart;
+                } else {
+                    // No seekable content - live only
+                    seekableStart = currentTime;
+                    seekableEnd = currentTime;
+                    actualDvrWindow = 0;
+                }
+                
+                // Only update slider if user is not dragging
+                if (!isDragging && !isSeekingManually) {
+                    seekSlider.min = Math.floor(seekableStart);
+                    seekSlider.max = Math.floor(seekableEnd);
+                    seekSlider.step = 1;
+                    seekSlider.value = Math.floor(currentTime);
+                } else {
+                    // User is manually controlling - update range but keep their position
+                    seekSlider.min = Math.floor(seekableStart);
+                    seekSlider.max = Math.floor(seekableEnd);
+                    seekSlider.step = 1;
+                    // Don't update slider.value - keep user's manual position
+                }
+                
+                addDebugLog(`REAL DVR: ${formatTime(actualDvrWindow)} available, seek range: ${formatTime(seekableStart)} - ${formatTime(seekableEnd)}, dragging: ${isDragging}`);
+                
+                // Update duration display to show REAL DVR window
+                document.getElementById('duration').textContent = `LIVE (${Math.floor(actualDvrWindow/60)}m DVR)`;
+            } else {
+                // Normal video with finite duration
+                duration = duration || 0;
+                document.getElementById('currentTime').textContent = formatTime(currentTime);
+                document.getElementById('duration').textContent = formatTime(duration);
+                
+                // Only update slider if user is not dragging
+                if (!isDragging && !isSeekingManually) {
+                    if (duration > 0) {
+                        seekSlider.min = 0;
+                        seekSlider.max = Math.floor(duration);
+                        seekSlider.step = 1;
+                        seekSlider.value = Math.floor(currentTime);
+                    }
+                }
+            }
+            
+                        // Check if we're behind live edge for live streams
+            if (isLiveStream) {
+                const liveEdgeBtn = document.getElementById('liveEdgeBtn');
+                const seekSlider = document.getElementById('seekSlider');
+                
+                // Get the actual live edge position
+                let liveEdgeTime = currentTime;
+                if (video.seekable && video.seekable.length > 0) {
+                    liveEdgeTime = video.seekable.end(video.seekable.length - 1);
+                } else if (video.buffered && video.buffered.length > 0) {
+                    liveEdgeTime = video.buffered.end(video.buffered.length - 1);
+                } else if (duration && isFinite(duration)) {
+                    liveEdgeTime = duration;
+                }
+                
+                // Use slider position when manually seeking, otherwise use video time
+                let currentPosition = currentTime;
+                if ((isDragging || isSeekingManually) && seekSlider) {
+                    currentPosition = parseFloat(seekSlider.value);
+                }
+                
+                const behindLive = liveEdgeTime - currentPosition;
+                
+                if (behindLive > 5) { // 5 seconds behind live edge
+                    liveEdgeBtn.style.display = 'block';
+                    liveEdgeBtn.textContent = `🔴 GO LIVE (-${Math.floor(behindLive)}s)`;
+                } else {
+                    liveEdgeBtn.style.display = 'none';
+                }
+            }
+        }
+
+
+
+        function goToLiveEdge() {
+            const video = document.getElementById('video');
+            if (!video || !isLiveStream) return;
+            
+            addDebugLog('Going to live edge');
+            
+            // Get the actual live edge position
+            let liveEdgeTime = video.currentTime;
+            
+            if (video.seekable && video.seekable.length > 0) {
+                liveEdgeTime = video.seekable.end(video.seekable.length - 1);
+            } else if (video.buffered && video.buffered.length > 0) {
+                liveEdgeTime = video.buffered.end(video.buffered.length - 1);
+            } else if (video.duration && isFinite(video.duration)) {
+                liveEdgeTime = video.duration;
+            }
+            
+            addDebugLog(`Seeking to live edge: ${liveEdgeTime}`);
+            video.currentTime = liveEdgeTime;
+            
+            document.getElementById('liveEdgeBtn').style.display = 'none';
+            isDragging = false;
+            isSeekingManually = false;
+            
+            // Clear manual seeking timeout
+            if (manualSeekTimeout) {
+                clearTimeout(manualSeekTimeout);
+            }
+            
+            showStatus('🔴 Jumped to live edge', 'success');
+        }
+
+                // Bind seeking events to video element and custom controls
+        function bindSeekingEvents() {
+            const video = document.getElementById('video');
+            const seekSlider = document.getElementById('seekSlider');
+            if (!video || !seekSlider) return;
+            
+            video.addEventListener('timeupdate', updateTimeDisplay);
+            video.addEventListener('durationchange', updateTimeDisplay);
+            video.addEventListener('progress', updateTimeDisplay);
+            
+            video.addEventListener('seeked', function() {
+                addDebugLog(`Seeked to ${formatTime(video.currentTime)}`);
+                // Don't immediately reset seeking state - let timeout handle it
+            });
+            
+            // Monitor seeking behavior without interfering
+            video.addEventListener('timeupdate', function() {
+                if (isDragging || isSeekingManually) {
+                    const userSeekTime = parseFloat(seekSlider.value);
+                    const timeDifference = Math.abs(video.currentTime - userSeekTime);
+                    
+                    // Only log large differences but don't interfere with HLS playback
+                    if (timeDifference > 10) {
+                        addDebugLog(`Large time difference detected: video=${formatTime(video.currentTime)}, slider=${formatTime(userSeekTime)}, diff=${timeDifference.toFixed(1)}s`);
+                    }
+                    
+                    // Don't force currentTime - let HLS handle segment loading naturally
+                }
+            });
+            
+            // Handle slider dragging start
+            seekSlider.addEventListener('mousedown', function() {
+                isDragging = true;
+                isSeekingManually = true;
+                addDebugLog('Started dragging timeline');
+            });
+            
+            seekSlider.addEventListener('touchstart', function() {
+                isDragging = true;
+                isSeekingManually = true;
+                addDebugLog('Started dragging timeline (touch)');
+            });
+            
+            // Handle slider dragging end
+            seekSlider.addEventListener('mouseup', function() {
+                isDragging = false;
+                // Clear any existing timeout
+                if (manualSeekTimeout) {
+                    clearTimeout(manualSeekTimeout);
+                }
+                // Stay manual for 30 seconds or until user goes to live
+                manualSeekTimeout = setTimeout(() => { 
+                    isSeekingManually = false; 
+                    addDebugLog('Manual seeking timeout - returning to auto mode');
+                }, 30000); // Stay manual for 30 seconds
+                addDebugLog('Finished dragging timeline - staying manual for 30s');
+            });
+            
+            seekSlider.addEventListener('touchend', function() {
+                isDragging = false;
+                // Clear any existing timeout
+                if (manualSeekTimeout) {
+                    clearTimeout(manualSeekTimeout);
+                }
+                // Stay manual for 30 seconds or until user goes to live
+                manualSeekTimeout = setTimeout(() => { 
+                    isSeekingManually = false; 
+                    addDebugLog('Manual seeking timeout - returning to auto mode');
+                }, 30000); // Stay manual for 30 seconds
+                addDebugLog('Finished dragging timeline (touch) - staying manual for 30s');
+            });
+
+            // Handle slider input for seeking (during drag)
+            seekSlider.addEventListener('input', function() {
+                const newTime = parseFloat(seekSlider.value);
+                
+                // Set seeking state but don't actually seek during drag
+                isSeekingManually = true;
+                isDragging = true;
+                
+                // Just update the time display to show where we're dragging to
+                addDebugLog(`Dragging to: ${formatTime(newTime)}`);
+                
+                // Update time display to show slider position
+                if (isDragging || isSeekingManually) {
+                    // Show slider time while dragging
+                    document.getElementById('currentTime').textContent = formatTime(newTime);
+                }
+            });
+            
+            // Handle actual seeking when user finishes dragging
+            seekSlider.addEventListener('change', function() {
+                const newTime = parseFloat(seekSlider.value);
+                
+                addDebugLog(`Seeking to: ${formatTime(newTime)}`);
+                
+                // Actually perform the seek
+                video.currentTime = newTime;
+                
+                // Update GO LIVE button if needed
+                if (isLiveStream && video.currentTime) {
+                    const liveBtn = document.getElementById('liveEdgeBtn');
+                    const currentVideoTime = video.currentTime;
+                    
+                    if (newTime < currentVideoTime - 5) { // More than 5 seconds back
+                        liveBtn.style.display = 'block';
+                        const behindBy = Math.floor(currentVideoTime - newTime);
+                        liveBtn.textContent = `🔴 GO LIVE (-${behindBy}s)`;
+                    }
+                }
+            });
         }
 
         window.onload = function() {
             refreshActiveStreams();
+            bindSeekingEvents();
         };
     </script>
 </body>
