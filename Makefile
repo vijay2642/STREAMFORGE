@@ -11,6 +11,7 @@ build-all:
 	@go build -o bin/notification ./services/notification
 	@go build -o bin/analytics ./services/analytics
 	@go build -o bin/stream-distribution ./services/stream-distribution
+	@go build -o bin/transcoder ./services/transcoder
 
 # Build individual services
 build-ingestion:
@@ -36,6 +37,9 @@ build-notification:
 
 build-analytics:
 	@go build -o bin/analytics ./services/analytics
+
+build-transcoder:
+	@go build -o bin/transcoder ./services/transcoder
 
 # Test all services
 test-all:
@@ -125,6 +129,9 @@ run-notification:
 run-analytics:
 	@go run ./services/analytics
 
+run-transcoder:
+	@go run ./services/transcoder
+
 # Docker build operations
 docker-build-all:
 	@echo "Building all Docker images..."
@@ -145,6 +152,7 @@ health-check:
 	@curl -f http://localhost:8085/health || echo "Stream Metadata: DOWN"
 	@curl -f http://localhost:8086/health || echo "Notification: DOWN"
 	@curl -f http://localhost:8087/health || echo "Analytics: DOWN"
+	@curl -f http://localhost:8083/health || echo "Transcoder: DOWN"
 
 # Code quality
 lint:
@@ -169,6 +177,35 @@ deps:
 generate:
 	@echo "Generating code..."
 	@go generate ./...
+
+# RTMP Streaming Operations
+rtmp-up:
+	@echo "Starting RTMP streaming stack..."
+	@docker-compose -f docker-compose-rtmp.yml up -d
+
+rtmp-down:
+	@echo "Stopping RTMP streaming stack..."
+	@docker-compose -f docker-compose-rtmp.yml down
+
+rtmp-logs:
+	@docker-compose -f docker-compose-rtmp.yml logs -f
+
+# Transcoding Operations
+start-transcoder:
+	@echo "Starting transcoder for stream: $(STREAM)"
+	@curl -X POST http://localhost:8083/transcode/start/$(STREAM) || echo "Failed to start transcoder"
+
+stop-transcoder:
+	@echo "Stopping transcoder for stream: $(STREAM)"
+	@curl -X POST http://localhost:8083/transcode/stop/$(STREAM) || echo "Failed to stop transcoder"
+
+transcoder-status:
+	@echo "Getting transcoder status for stream: $(STREAM)"
+	@curl http://localhost:8083/transcode/status/$(STREAM) | jq || echo "Failed to get status"
+
+active-transcoders:
+	@echo "Getting all active transcoders..."
+	@curl http://localhost:8083/transcode/active | jq || echo "Failed to get active transcoders"
 
 # Help
 help:

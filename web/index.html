@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamForge - Multi-Quality Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .stream-controls {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .stream-controls input {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 200px;
+        }
+        .stream-controls button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .stream-controls button:hover {
+            background-color: #0056b3;
+        }
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            max-width: 800px;
+            margin: 0 auto;
+            aspect-ratio: 16/9;
+        }
+        video {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            aspect-ratio: 16/9;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: #000;
+        }
+        .quality-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: monospace;
+            max-width: 300px;
+        }
+        .quality-selector {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .quality-selector select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 0 10px;
+        }
+        .status {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .transcoder-info {
+            background-color: #e2e3e5;
+            border: 1px solid #d6d8db;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .active-streams {
+            margin-top: 30px;
+        }
+        .stream-item {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .hls-debug {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .quality-indicator {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 3px;
+            color: white;
+            font-weight: bold;
+        }
+        .quality-1080p { background-color: #28a745; }
+        .quality-720p { background-color: #17a2b8; }
+        .quality-480p { background-color: #007bff; }
+        .quality-360p { background-color: #6f42c1; }
+        .quality-240p { background-color: #fd7e14; }
+        .quality-144p { background-color: #dc3545; }
+        .quality-auto { background-color: #6c757d; }
+        .live-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #ff0000;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 1000;
+            animation: pulse 2s infinite;
+            display: none;
+        }
+        .switching-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #ffa500;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 1001;
+            animation: pulse 1s infinite;
+            display: none;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        .video-controls-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.7));
+            padding: 20px;
+            z-index: 999;
+        }
+        .live-status {
+            color: #ff4444;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        /* Timeline controls will be hidden dynamically only for live streams */
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 StreamForge Multi-Quality Player</h1>
+        
+        <div class="stream-controls">
+            <div>
+                <input type="text" id="streamKey" placeholder="Stream Key (e.g., stream1)" value="stream1">
+                <button onclick="startTranscoding()">Start Transcoding</button>
+                <button onclick="stopTranscoding()">Stop Transcoding</button>
+                <button onclick="loadStream()">Load Stream</button>
+                <button onclick="refreshActiveStreams()">Refresh Active Streams</button>
+            </div>
+        </div>
+        
+        <div class="video-container">
+            <video id="video" controls>
+                Your browser does not support the video tag.
+            </video>
+            <div id="qualityInfo" class="quality-info" style="display: none;">
+                <div><strong>Current Quality:</strong> <span id="currentQuality">-</span></div>
+                <div><strong>Resolution:</strong> <span id="currentResolution">-</span></div>
+                <div><strong>Bitrate:</strong> <span id="currentBitrate">-</span></div>
+                <div><strong>Bandwidth:</strong> <span id="estimatedBandwidth">-</span></div>
+                <div><strong>Buffer:</strong> <span id="bufferInfo">-</span></div>
+            </div>
+            <div class="live-indicator" id="liveIndicator">🔴 LIVE</div>
+            <div class="switching-indicator" id="switchingIndicator">🔄 SWITCHING</div>
+        </div>
+        
+        <div class="quality-selector">
+            <label for="qualitySelect">Quality:</label>
+            <select id="qualitySelect" onchange="changeQuality()">
+                <option value="master">Auto (Adaptive)</option>
+                <option value="0">1080p (5.1 Mbps)</option>
+                <option value="1">720p (2.9 Mbps)</option>
+                <option value="2">480p (1.8 Mbps)</option>
+                <option value="3">360p (1.0 Mbps)</option>
+                <option value="4">240p (620 Kbps)</option>
+                <option value="5">144p (400 Kbps)</option>
+            </select>
+            
+            <button onclick="getStreamStatus()">Get Status</button>
+            <button onclick="toggleDebugInfo()">Toggle Debug</button>
+        </div>
+
+        <div id="availableQualities" style="margin-top: 20px; text-align: center;"></div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div id="hlsDebug" class="hls-debug" style="display: none;">
+            <h4>HLS Debug Information</h4>
+            <div id="debugLog"></div>
+        </div>
+        
+        <div class="active-streams">
+            <h3>Active Transcoders</h3>
+            <div id="activeStreams"></div>
+        </div>
+    </div>
+
+    <script>
+        let hls;
+        let currentStreamKey = '';
+        let debugEnabled = false;
+        let debugLog = [];
+
+        function addDebugLog(message) {
+            if (!debugEnabled) return;
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.unshift(`[${timestamp}] ${message}`);
+            if (debugLog.length > 50) debugLog.pop();
+            updateDebugDisplay();
+        }
+
+        function updateDebugDisplay() {
+            if (debugEnabled) {
+                document.getElementById('debugLog').innerHTML = debugLog.join('<br>');
+            }
+        }
+
+        function toggleDebugInfo() {
+            debugEnabled = !debugEnabled;
+            const debugDiv = document.getElementById('hlsDebug');
+            if (debugEnabled) {
+                debugDiv.style.display = 'block';
+                addDebugLog('Debug mode enabled');
+            } else {
+                debugDiv.style.display = 'none';
+            }
+        }
+
+        function updateQualityInfo(level) {
+            const qualityNames = ['1080p', '720p', '480p', '360p', '240p', '144p'];
+            const resolutions = ['1920x1080', '1280x720', '854x480', '640x360', '426x240', '256x144'];
+            const bitrates = ['5130k', '2930k', '1830k', '1060k', '620k', '400k'];
+            
+            // ALWAYS show the actual playing quality from HLS, not the dropdown selection
+            if (level >= 0 && level < qualityNames.length) {
+                document.getElementById('currentQuality').textContent = qualityNames[level];
+                document.getElementById('currentResolution').textContent = resolutions[level];
+                document.getElementById('currentBitrate').textContent = bitrates[level];
+            } else {
+                document.getElementById('currentQuality').textContent = 'Unknown';
+                document.getElementById('currentResolution').textContent = 'Unknown';
+                document.getElementById('currentBitrate').textContent = 'Unknown';
+            }
+        }
+
+        function showAvailableQualities(levels) {
+            const container = document.getElementById('availableQualities');
+            if (!levels || levels.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div><strong>Available Qualities:</strong> ';
+            
+            levels.forEach((level, index) => {
+                const height = level.height;
+                const bandwidth = Math.round(level.bitrate / 1000);
+                const qualityName = `${height}p`;
+                const className = `quality-${qualityName.toLowerCase()}`;
+                html += `<span class="quality-indicator ${className}">${qualityName} (${bandwidth}k)</span>`;
+                
+                addDebugLog(`Level ${index}: ${height}p @ ${bandwidth}kbps`);
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        async function startTranscoding() {
+            const streamKey = document.getElementById('streamKey').value;
+            if (!streamKey) {
+                showStatus('Please enter a stream key', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8083/transcode/start/${streamKey}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(`Transcoding started for ${streamKey}. Wait 10-15 seconds for segments to be generated.`, 'success');
+                    addDebugLog(`Transcoding started for ${streamKey}`);
+                } else {
+                    showStatus(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopTranscoding() {
+            const streamKey = document.getElementById('streamKey').value;
+            if (!streamKey) {
+                showStatus('Please enter a stream key', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8083/transcode/stop/${streamKey}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(`Transcoding stopped for ${streamKey}`, 'success');
+                    addDebugLog(`Transcoding stopped for ${streamKey}`);
+                } else {
+                    showStatus(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadStream() {
+            const streamKey = document.getElementById('streamKey').value;
+            if (!streamKey) {
+                showStatus('Please enter a stream key', 'error');
+                return;
+            }
+
+            currentStreamKey = streamKey;
+            const qualitySelect = document.getElementById('qualitySelect');
+            const quality = qualitySelect.value;
+            
+            let streamUrl = `/proxy/hls/${streamKey}/master.m3u8`;
+            
+            // Always use master playlist for live streams to maintain live behavior
+            // Quality will be controlled via HLS.js level selection
+
+            const video = document.getElementById('video');
+            
+            if (hls) {
+                hls.destroy();
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 10,
+                    maxMaxBufferLength: 20,
+                    backBufferLength: 10,
+                    liveBackBufferLength: 3,
+                    liveSyncDurationCount: 2,
+                    liveMaxLatencyDurationCount: 5,
+                    liveDurationInfinity: true,
+                    enableLiveAsLive: true,
+                    startLevel: -1, // Auto-select starting quality
+                    capLevelToPlayerSize: false, // Disable auto size-based selection
+                    maxFragLookUpTolerance: 0.1,
+                    maxSeekHole: 2,
+                    abrEwmaDefaultEstimate: 500000, // Conservative bandwidth estimate
+                    abrEwmaSlowVoD: 3,
+                    abrEwmaFastVoD: 3,
+                    abrEwmaSlowLive: 9,
+                    abrEwmaFastLive: 5,
+                    // Force immediate quality switches
+                    abrMaxWithRealBitrate: false,
+                    abrBandWidthFactor: 0.1, // Very low to prevent upscaling
+                    abrBandWidthUpFactor: 0.1,
+                    maxStarvationDelay: 0.5,
+                    maxLoadingDelay: 0.5
+                });
+                
+                hls.loadSource(streamUrl);
+                hls.attachMedia(video);
+                
+                document.getElementById('qualityInfo').style.display = 'block';
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                    showStatus(`✅ Stream loaded: ${streamKey} (${quality === 'master' ? 'Adaptive' : quality}) - ${data.levels.length} quality levels available`, 'success');
+                    addDebugLog(`Manifest parsed: ${data.levels.length} quality levels`);
+                    
+                    // Debug: Log the actual level ordering after parsing
+                    addDebugLog(`HLS.js Level Ordering:`);
+                    for (let i = 0; i < data.levels.length; i++) {
+                        addDebugLog(`Level ${i}: ${data.levels[i].height}p (${Math.round(data.levels[i].bitrate/1000)}k)`);
+                    }
+                    
+                    showAvailableQualities(data.levels);
+                    
+                    // Initialize quality selection if specified
+                    if (quality !== 'master') {
+                        const levelIndex = parseInt(quality);
+                        setTimeout(() => {
+                            hls.currentLevel = levelIndex;
+                            updateQualityInfo(levelIndex);
+                            addDebugLog(`Initial quality set to level ${levelIndex}`);
+                        }, 500);
+                    }
+                    
+                    // Show LIVE indicator and manage live streaming
+                    const liveIndicator = document.getElementById('liveIndicator');
+                    if (data.live || streamUrl.includes('master.m3u8')) {
+                        liveIndicator.style.display = 'block';
+                        
+                        // Hide video timeline controls ONLY for live streams
+                        const style = document.createElement('style');
+                        style.id = 'liveStreamStyles';
+                        style.innerHTML = `
+                            video::-webkit-media-controls-timeline { display: none !important; }
+                            video::-webkit-media-controls-current-time-display { display: none !important; }
+                            video::-webkit-media-controls-time-remaining-display { display: none !important; }
+                        `;
+                        document.head.appendChild(style);
+                        
+                        // Start close to live edge but allow some buffer
+                        video.addEventListener('canplay', function() {
+                            if (video.duration && video.duration > 5) {
+                                video.currentTime = video.duration - 5;
+                                addDebugLog('Started near live edge');
+                            }
+                        }, { once: true });
+                        
+                        addDebugLog('Stream detected as LIVE');
+                    } else {
+                        liveIndicator.style.display = 'none';
+                        // Remove live stream styles if they exist (for VOD content)
+                        const existingStyle = document.getElementById('liveStreamStyles');
+                        if (existingStyle) {
+                            existingStyle.remove();
+                        }
+                    }
+                });
+                
+                // Bind all HLS events
+                bindHlsEvents();
+
+                setInterval(() => {
+                    if (hls.bandwidthEstimate) {
+                        const bw = (hls.bandwidthEstimate / 1000).toFixed(0);
+                        document.getElementById('estimatedBandwidth').textContent = `${bw} Kbps`;
+                    }
+                    
+                    // Debug current quality state
+                    if (hls && hls.levels && hls.levels.length > 0) {
+                        const currentLevel = hls.currentLevel;
+                        const loadLevel = hls.loadLevel;
+                        const nextLevel = hls.nextLevel;
+                        addDebugLog(`Quality check - current: ${currentLevel}, load: ${loadLevel}, next: ${nextLevel}, auto: ${hls.autoLevelEnabled}`);
+                    }
+                }, 2000);
+                
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = streamUrl;
+                showStatus(`✅ Stream loaded: ${streamKey} (Safari HLS)`, 'success');
+                document.getElementById('qualityInfo').style.display = 'block';
+                addDebugLog('Using Safari native HLS - quality switching limited');
+            } else {
+                const directUrl = `http://localhost:8083/hls/${streamKey}/master.m3u8`;
+                showStatus(`❌ HLS not supported. Use VLC with: ${directUrl}`, 'error');
+            }
+        }
+
+        function bindHlsEvents() {
+            if (!hls) return;
+            
+            hls.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+                const qualitySelect = document.getElementById('qualitySelect');
+                const selectedQuality = qualitySelect.value;
+                
+                addDebugLog(`LEVEL_SWITCHED: ${data.level}, currentLevel: ${hls.currentLevel}, selected: ${selectedQuality}`);
+                
+                // Always update quality info to show actual playing quality
+                updateQualityInfo(data.level);
+                
+                const qualityNames = ['1080p', '720p', '480p', '360p', '240p', '144p'];
+                const qualityName = qualityNames[data.level] || `Level ${data.level}`;
+                
+                if (selectedQuality === 'master') {
+                    showStatus(`🔄 Auto-selected: ${qualityName}`, 'success');
+                } else {
+                    showStatus(`🎯 Playing: ${qualityName}`, 'success');
+                }
+            });
+            
+            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                const bufferLength = hls.media ? hls.media.buffered.length > 0 ? 
+                    (hls.media.buffered.end(0) - hls.media.currentTime).toFixed(1) : '0' : '0';
+                document.getElementById('bufferInfo').textContent = `${bufferLength}s`;
+                
+                // Log fragment details to track actual quality being loaded
+                if (data.frag && data.frag.level !== undefined) {
+                    const fragLevel = data.frag.level;
+                    const levelInfo = hls.levels[fragLevel];
+                                    if (levelInfo) {
+                    addDebugLog(`FRAG_LOADED: Level ${fragLevel} (${levelInfo.height}p, ${Math.round(levelInfo.bitrate/1000)}k) - ACTUAL QUALITY PLAYING`);
+                }
+                }
+            });
+            
+            hls.on(Hls.Events.LEVEL_LOADING, function(event, data) {
+                addDebugLog(`Loading level ${data.level} - ${hls.levels[data.level] ? hls.levels[data.level].height + 'p' : 'unknown'}`);
+            });
+            
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                    const directUrl = `http://localhost:8083/hls/${currentStreamKey}/master.m3u8`;
+                    showStatus(`❌ Stream error: ${data.details}. Try VLC with: ${directUrl}`, 'error');
+                    addDebugLog(`Fatal error: ${data.details}`);
+                    
+                    setTimeout(() => {
+                        showStatus(`💡 DEMO TIP: Open VLC → Media → Open Network Stream → Enter: ${directUrl}`, 'info');
+                    }, 3000);
+                } else {
+                    addDebugLog(`Non-fatal error: ${data.details}`);
+                }
+            });
+        }
+
+                function findLevelIndexByHeight(targetHeight) {
+            if (!hls || !hls.levels) return -1;
+            
+            for (let i = 0; i < hls.levels.length; i++) {
+                if (hls.levels[i].height === targetHeight) {
+                    addDebugLog(`Found level ${i} for ${targetHeight}p`);
+                    return i;
+                }
+            }
+            addDebugLog(`Could not find level for ${targetHeight}p`);
+            return -1;
+        }
+
+        function changeQuality() {
+            if (currentStreamKey && hls) {
+                const qualitySelect = document.getElementById('qualitySelect');
+                const selectedQuality = qualitySelect.value;
+                
+                addDebugLog(`Available levels: ${hls.levels.length}, Current: ${hls.currentLevel}`);
+                
+                if (selectedQuality === 'master') {
+                    // Enable auto quality selection
+                    hls.autoLevelEnabled = true;
+                    hls.currentLevel = -1;
+                    addDebugLog('Enabled auto quality selection');
+                    showStatus('🔄 Auto quality selection enabled', 'info');
+                } else {
+                    // Map dropdown selection to actual height and find correct level index
+                    const qualityMap = {
+                        '0': 1080,  // 1080p
+                        '1': 720,   // 720p
+                        '2': 480,   // 480p
+                        '3': 360,   // 360p
+                        '4': 240,   // 240p
+                        '5': 144    // 144p
+                    };
+                    
+                    const targetHeight = qualityMap[selectedQuality];
+                    const actualLevelIndex = findLevelIndexByHeight(targetHeight);
+                    
+                    if (actualLevelIndex >= 0) {
+                        addDebugLog(`User selected dropdown ${selectedQuality} (${targetHeight}p) → actual level ${actualLevelIndex}`);
+                        addDebugLog(`BEFORE CHANGE - Current level mappings:`);
+                        for (let i = 0; i < hls.levels.length; i++) {
+                            addDebugLog(`Level ${i}: ${hls.levels[i].height}p (${Math.round(hls.levels[i].bitrate/1000)}k)`);
+                        }
+                                                 
+                        // AGGRESSIVELY disable auto level switching
+                        hls.autoLevelEnabled = false;
+                        
+                        // Set all level properties to force the selection
+                        hls.currentLevel = actualLevelIndex;
+                        hls.loadLevel = actualLevelIndex;
+                        hls.nextLevel = actualLevelIndex;
+                        
+                        // Force immediate manual level switching by destroying and recreating
+                        const video = document.getElementById('video');
+                        const currentTime = video.currentTime;
+                        const wasPaused = video.paused;
+                        
+                        // Store current state
+                        const streamUrl = hls.url;
+                        
+                        addDebugLog(`DESTROYING HLS and recreating with forced level ${actualLevelIndex} (${targetHeight}p)`);
+                        
+                        // Show switching indicator
+                        document.getElementById('switchingIndicator').style.display = 'block';
+                        document.getElementById('liveIndicator').style.display = 'none';
+                        
+                        // Destroy current HLS instance
+                        hls.destroy();
+                        
+                        // Create new HLS instance with the specific level forced
+                        hls = new Hls({
+                            debug: false,
+                            enableWorker: true,
+                            lowLatencyMode: true,
+                            maxBufferLength: 5, // Smaller buffer for faster switching
+                            maxMaxBufferLength: 10,
+                            backBufferLength: 5,
+                            liveBackBufferLength: 2,
+                            liveSyncDurationCount: 2,
+                            liveMaxLatencyDurationCount: 5,
+                            liveDurationInfinity: true,
+                            enableLiveAsLive: true,
+                            startLevel: actualLevelIndex, // Force starting at selected level
+                            capLevelToPlayerSize: false,
+                            maxFragLookUpTolerance: 0.1,
+                            maxSeekHole: 2,
+                            abrEwmaDefaultEstimate: 100000, // Very low bandwidth estimate
+                            abrMaxWithRealBitrate: false,
+                            abrBandWidthFactor: 0.01, // Extremely low to prevent upscaling
+                            abrBandWidthUpFactor: 0.01,
+                            maxStarvationDelay: 0.1,
+                            maxLoadingDelay: 0.1
+                        });
+                        
+                        // Reload with the selected level forced
+                        hls.loadSource(streamUrl);
+                        hls.attachMedia(video);
+                        
+                        // Force the level immediately after loading
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                            hls.autoLevelEnabled = false;
+                            const newActualIndex = findLevelIndexByHeight(targetHeight);
+                            hls.currentLevel = newActualIndex;
+                            hls.loadLevel = newActualIndex;
+                            hls.nextLevel = newActualIndex;
+                            addDebugLog(`MANIFEST_PARSED: Re-forced level to ${newActualIndex} (${targetHeight}p)`);
+                        });
+                        
+                        // Restore playback position
+                        video.addEventListener('canplay', function() {
+                            if (currentTime > 0 && !isNaN(currentTime)) {
+                                video.currentTime = currentTime;
+                            }
+                            if (!wasPaused) {
+                                video.play();
+                            }
+                            
+                            // Hide switching indicator and restore live indicator
+                            document.getElementById('switchingIndicator').style.display = 'none';
+                            document.getElementById('liveIndicator').style.display = 'block';
+                        }, { once: true });
+                        
+                        // Re-bind all the event listeners
+                        bindHlsEvents();
+                        
+                        addDebugLog(`RELOADED with forced level ${actualLevelIndex} (${targetHeight}p)`);
+                        showStatus(`🎯 Force-switched to ${targetHeight}p`, 'info');
+                    } else {
+                        addDebugLog(`Could not find level for ${targetHeight}p - available levels: ${hls.levels.map(l => l.height + 'p').join(', ')}`);
+                    }
+                }
+            } else {
+                addDebugLog('Cannot change quality: no stream or HLS instance');
+            }
+        }
+
+        async function getStreamStatus() {
+            if (!currentStreamKey) return;
+            
+            try {
+                const response = await fetch(`/proxy/transcode/status/${currentStreamKey}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('streamStatus').textContent = 
+                        `Status: ${data.status} (${data.uptime || 'N/A'})`;
+                } else {
+                    document.getElementById('streamStatus').textContent = 'Status: Not found';
+                }
+            } catch (error) {
+                console.log('Could not fetch stream status:', error);
+                document.getElementById('streamStatus').textContent = 'Status: Unknown';
+            }
+        }
+
+        async function refreshActiveStreams() {
+            try {
+                const response = await fetch('/proxy/transcode/active');
+                const data = await response.json();
+                
+                const activeList = document.getElementById('activeStreamsList');
+                if (data.streams && data.streams.length > 0) {
+                    activeList.innerHTML = data.streams.map(stream => 
+                        `<div class="stream-item">
+                            <strong>${stream.stream_key}</strong> - ${stream.status} 
+                            <small>(${stream.uptime})</small>
+                        </div>`
+                    ).join('');
+                } else {
+                    activeList.innerHTML = '<div class="stream-item">No active streams</div>';
+                }
+            } catch (error) {
+                console.log('Could not fetch active streams:', error);
+                document.getElementById('activeStreamsList').innerHTML = 
+                    '<div class="stream-item">Unable to load active streams</div>';
+            }
+        }
+
+        window.onload = function() {
+            refreshActiveStreams();
+        };
+    </script>
+</body>
+</html> 
