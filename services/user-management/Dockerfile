@@ -1,4 +1,3 @@
-# Build stage
 FROM golang:1.21-alpine AS builder
 
 # Install build dependencies
@@ -14,28 +13,24 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o transcoder main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o users main.go
 
 # Final stage
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates ffmpeg
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
 
 # Copy the binary from builder stage
-COPY --from=builder /app/transcoder .
-
-# Create output directory
-RUN mkdir -p /output
+COPY --from=builder /app/users .
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8083
 
 # Set environment variables
-ENV PORT=8080
-ENV OUTPUT_DIR=/output
+ENV PORT=8083
 
 # Run the application
-CMD ["./transcoder"] 
+CMD ["./users"] 

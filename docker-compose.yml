@@ -3,11 +3,11 @@ version: '3.8'
 services:
   # Databases
   postgres:
-    image: postgres:15
+    image: postgres:13
     environment:
       POSTGRES_DB: streamforge
       POSTGRES_USER: streamforge
-      POSTGRES_PASSWORD: password123
+      POSTGRES_PASSWORD: streamforge123
     ports:
       - "5432:5432"
     volumes:
@@ -65,24 +65,16 @@ services:
       - streamforge-network
 
   # Stream Processing Service
-  stream-processing:
+  stream-processor:
     build:
-      context: .
-      dockerfile: services/stream-processing/Dockerfile
-    ports:
-      - "8082:8082"
+      context: ./services/stream-processing
     environment:
-      - STREAM_PROCESSING_SERVER_PORT=8082
-      - STREAM_PROCESSING_STREAM_HLS_PATH=/tmp/hls
-      - STREAM_PROCESSING_STREAM_DASH_PATH=/tmp/dash
-      - STREAM_PROCESSING_REDIS_HOST=redis
-    volumes:
-      - stream_data:/tmp/streams
-      - hls_data:/tmp/hls
-      - dash_data:/tmp/dash
+      - PORT=8081
+      - DATABASE_URL=postgresql://streamforge:streamforge123@postgres:5432/streamforge
+    ports:
+      - "8081:8081"
     depends_on:
-      - redis
-      - stream-ingestion
+      - postgres
     networks:
       - streamforge-network
 
@@ -103,28 +95,21 @@ services:
       - dash_data:/tmp/dash
     depends_on:
       - redis
-      - stream-processing
+      - stream-processor
     networks:
       - streamforge-network
 
   # User Management Service
   user-management:
     build:
-      context: .
-      dockerfile: services/user-management/Dockerfile
-    ports:
-      - "8084:8084"
+      context: ./services/user-management
     environment:
-      - USER_MANAGEMENT_SERVER_PORT=8084
-      - USER_MANAGEMENT_DATABASE_HOST=postgres
-      - USER_MANAGEMENT_DATABASE_USER=streamforge
-      - USER_MANAGEMENT_DATABASE_PASSWORD=password123
-      - USER_MANAGEMENT_DATABASE_DBNAME=streamforge
-      - USER_MANAGEMENT_AUTH_JWT_SECRET=your-super-secret-jwt-key
-      - USER_MANAGEMENT_REDIS_HOST=redis
+      - PORT=8083
+      - DATABASE_URL=postgresql://streamforge:streamforge123@postgres:5432/streamforge
+    ports:
+      - "8083:8083"
     depends_on:
       - postgres
-      - redis
     networks:
       - streamforge-network
 
@@ -199,6 +184,50 @@ services:
       - REACT_APP_API_URL=http://localhost:8080
     depends_on:
       - api-gateway
+    networks:
+      - streamforge-network
+
+  # Transcoder Service  
+  transcoder:
+    build:
+      context: ./services/transcoder
+    environment:
+      - PORT=8080
+      - OUTPUT_DIR=/output
+      - DATABASE_URL=postgresql://streamforge:streamforge123@postgres:5432/streamforge
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./output:/output
+    depends_on:
+      - postgres
+    networks:
+      - streamforge-network
+
+  # Web Interface
+  web:
+    build:
+      context: ./web
+    ports:
+      - "8082:80"
+    depends_on:
+      - stream-processor
+      - transcoder
+      - user-management
+    networks:
+      - streamforge-network
+
+  # NGINX RTMP Server (for live streaming)
+  nginx-rtmp:
+    image: nginx:alpine
+    volumes:
+      - ./nginx-rtmp.conf:/etc/nginx/nginx.conf
+      - ./output:/var/www/html/hls
+    ports:
+      - "1935:1935"  # RTMP port
+      - "8084:80"     # HTTP port for HLS
+    depends_on:
+      - transcoder
     networks:
       - streamforge-network
 
