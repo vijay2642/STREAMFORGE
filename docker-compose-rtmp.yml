@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  nginx-rtmp:
+    image: tiangolo/nginx-rtmp
+    ports:
+      - "1935:1935"  # RTMP port
+      - "8080:80"    # HTTP stats port
+    volumes:
+      - ./nginx-rtmp.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    container_name: streamforge-rtmp 
