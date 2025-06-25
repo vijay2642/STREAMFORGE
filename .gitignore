@@ -32,7 +32,18 @@ output/
 # Temporary files
 *.tmp
 *.temp
-userinput.py
+
+# Keep userinput.py for development
+# userinput.py
+
+# Compiled binaries
+transcoder
+bin/
+build/
+
+# Large demo files
+demo-video.*
+*-demo.*
 
 # OS files
 .DS_Store
