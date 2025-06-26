@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
+	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
 	"github.com/streamforge/platform/pkg/config"
@@ -71,13 +71,13 @@ func (h *Handler) Login(c *gin.Context) {
 
 func (h *Handler) GetUser(c *gin.Context) {
 	userID := c.Param("id")
-	id, err := strconv.ParseUint(userID, 10, 32)
+	id, err := uuid.Parse(userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
-	user, err := h.userService.GetUserByID(uint(id))
+	user, err := h.userService.GetUserByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
@@ -88,7 +88,7 @@ func (h *Handler) GetUser(c *gin.Context) {
 
 func (h *Handler) UpdateUser(c *gin.Context) {
 	userID := c.Param("id")
-	id, err := strconv.ParseUint(userID, 10, 32)
+	id, err := uuid.Parse(userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -104,7 +104,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.UpdateUser(uint(id), req.Username, req.Email)
+	user, err := h.userService.UpdateUser(id, req.Username, req.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

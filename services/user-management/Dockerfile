@@ -1,7 +1,8 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.21-bookworm AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates git gcc build-essential libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -13,13 +14,14 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o users main.go
+ENV CGO_ENABLED=1
+RUN go build -o users ./services/user-management
 
 # Final stage
-FROM alpine:latest
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
 

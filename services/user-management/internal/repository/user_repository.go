@@ -37,14 +37,17 @@ func NewUserRepository(cfg *config.Config) (*UserRepository, error) {
 	return &UserRepository{db: db}, nil
 }
 
-// CreateUser creates a new user
-func (r *UserRepository) CreateUser(user *models.User) error {
+// Create creates a new user
+func (r *UserRepository) Create(user *models.User) (*models.User, error) {
 	user.ID = uuid.New()
-	return r.db.GetDB().Create(user).Error
+	if err := r.db.GetDB().Create(user).Error; err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
-// GetUserByID retrieves a user by ID
-func (r *UserRepository) GetUserByID(id uuid.UUID) (*models.User, error) {
+// GetByID retrieves a user by ID
+func (r *UserRepository) GetByID(id uuid.UUID) (*models.User, error) {
 	var user models.User
 	err := r.db.GetDB().Where("id = ?", id).First(&user).Error
 	if err != nil {
@@ -56,8 +59,8 @@ func (r *UserRepository) GetUserByID(id uuid.UUID) (*models.User, error) {
 	return &user, nil
 }
 
-// GetUserByEmail retrieves a user by email
-func (r *UserRepository) GetUserByEmail(email string) (*models.User, error) {
+// GetByEmail retrieves a user by email
+func (r *UserRepository) GetByEmail(email string) (*models.User, error) {
 	var user models.User
 	err := r.db.GetDB().Where("email = ?", email).First(&user).Error
 	if err != nil {
@@ -67,6 +70,19 @@ func (r *UserRepository) GetUserByEmail(email string) (*models.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+// Update updates an existing user
+func (r *UserRepository) Update(user *models.User) (*models.User, error) {
+	if err := r.db.GetDB().Save(user).Error; err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// Delete soft deletes a user
+func (r *UserRepository) Delete(id uuid.UUID) error {
+	return r.db.GetDB().Where("id = ?", id).Delete(&models.User{}).Error
 }
 
 // GetUserByUsername retrieves a user by username
@@ -82,16 +98,6 @@ func (r *UserRepository) GetUserByUsername(username string) (*models.User, error
 	return &user, nil
 }
 
-// UpdateUser updates an existing user
-func (r *UserRepository) UpdateUser(user *models.User) error {
-	return r.db.GetDB().Save(user).Error
-}
-
-// DeleteUser soft deletes a user
-func (r *UserRepository) DeleteUser(id uuid.UUID) error {
-	return r.db.GetDB().Where("id = ?", id).Delete(&models.User{}).Error
-}
-
 // ListUsers retrieves users with pagination
 func (r *UserRepository) ListUsers(limit, offset int) ([]models.User, int64, error) {
 	var users []models.User
@@ -102,7 +108,7 @@ func (r *UserRepository) ListUsers(limit, offset int) ([]models.User, int64, err
 		return nil, 0, err
 	}
 
-	// Get users with pagination
+	// Get paginated users
 	if err := r.db.GetDB().Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return nil, 0, err
 	}

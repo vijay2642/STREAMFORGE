@@ -71,9 +71,15 @@ func main() {
 	outputDir := flag.String("output-dir", "./output/hls", "HLS output directory")
 	flag.Parse()
 
-	// Override with environment variable if set
+	// Override with environment variables if set
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		*port = envPort
+	}
 	if envRTMP := os.Getenv("RTMP_URL"); envRTMP != "" {
 		*rtmpURL = envRTMP
+	}
+	if envOutputDir := os.Getenv("OUTPUT_DIR"); envOutputDir != "" {
+		*outputDir = envOutputDir
 	}
 
 	log.Printf("🎬 StreamForge Transcoder Service")

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal HLS Debug Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+            line-height: 1.4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        video {
+            width: 100%;
+            height: 300px;
+            background: #222;
+            margin: 20px 0;
+        }
+        .log {
+            background: #111;
+            padding: 15px;
+            border: 1px solid #333;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #555;
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        button:hover {
+            background: #555;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .metric {
+            background: #111;
+            padding: 10px;
+            border: 1px solid #333;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 18px;
+            color: #ff0;
+            font-weight: bold;
+        }
+        .metric-label {
+            font-size: 10px;
+            color: #888;
+        }
+        .test-section {
+            border: 1px solid #333;
+            margin: 20px 0;
+            padding: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 HLS Buffering Root Cause Analysis</h1>
+        <p>Minimal test to isolate the exact cause of buffering issues</p>
+
+        <!-- Test 1: Native Safari HLS (if supported) -->
+        <div class="test-section">
+            <h3>Test 1: Native Video Element (Safari/iOS)</h3>
+            <video id="nativeVideo" controls muted playsinline></video>
+            <div class="controls">
+                <button onclick="testNative()">Test Native HLS</button>
+                <button onclick="stopNative()">Stop</button>
+            </div>
+            <div id="nativeLog" class="log">Native HLS test log...</div>
+        </div>
+
+        <!-- Test 2: Ultra-minimal HLS.js -->
+        <div class="test-section">
+            <h3>Test 2: Minimal HLS.js Implementation</h3>
+            <video id="hlsVideo" controls muted playsinline></video>
+            <div class="controls">
+                <button onclick="testMinimalHLS()">Test Minimal HLS.js</button>
+                <button onclick="stopHLS()">Stop</button>
+                <button onclick="forceLowest()">Force 240p</button>
+            </div>
+            <div id="hlsLog" class="log">HLS.js test log...</div>
+        </div>
+
+        <!-- Real-time metrics -->
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value" id="bufferLevel">-</div>
+                <div class="metric-label">Buffer Level (s)</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="segmentTime">-</div>
+                <div class="metric-label">Segment Load (ms)</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="playbackRate">-</div>
+                <div class="metric-label">Playback Health</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="currentQuality">-</div>
+                <div class="metric-label">Current Quality</div>
+            </div>
+        </div>
+
+        <!-- Test 3: Direct segment access test -->
+        <div class="test-section">
+            <h3>Test 3: Direct Segment Loading Analysis</h3>
+            <div class="controls">
+                <button onclick="testDirectSegments()">Test Direct Segment Loading</button>
+                <button onclick="testPlaylistFetch()">Test Playlist Fetch Speed</button>
+            </div>
+            <div id="segmentLog" class="log">Direct segment test log...</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        let hls = null;
+        let segmentStartTime = 0;
+
+        function log(target, message) {
+            const logEl = document.getElementById(target);
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${timestamp}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateMetrics() {
+            // Update buffer level
+            const video = document.getElementById('hlsVideo');
+            if (video.buffered.length > 0) {
+                const bufferEnd = video.buffered.end(video.buffered.length - 1);
+                const currentTime = video.currentTime;
+                const bufferAhead = bufferEnd - currentTime;
+                document.getElementById('bufferLevel').textContent = bufferAhead.toFixed(2);
+                
+                // Color code buffer health
+                const element = document.getElementById('bufferLevel');
+                if (bufferAhead < 1) element.style.color = '#f00';
+                else if (bufferAhead < 3) element.style.color = '#ff0';
+                else element.style.color = '#0f0';
+            }
+
+            // Update playback rate
+            const playbackQuality = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : {};
+            const dropped = playbackQuality.droppedVideoFrames || 0;
+            document.getElementById('playbackRate').textContent = dropped;
+
+            // Update current quality
+            if (hls && hls.currentLevel >= 0) {
+                const level = hls.levels[hls.currentLevel];
+                document.getElementById('currentQuality').textContent = `${level.height}p`;
+            }
+        }
+
+        // Test 1: Native HLS
+        function testNative() {
+            const video = document.getElementById('nativeVideo');
+            const url = 'http://188.245.163.8:8083/hls/stream1/master.m3u8';
+            
+            log('nativeLog', 'Testing native HLS support...');
+            
+            if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                log('nativeLog', '✅ Native HLS supported - loading stream');
+                video.src = url;
+                
+                video.addEventListener('loadstart', () => log('nativeLog', '📡 Load started'));
+                video.addEventListener('loadedmetadata', () => log('nativeLog', '✅ Metadata loaded'));
+                video.addEventListener('canplay', () => log('nativeLog', '▶️ Can start playing'));
+                video.addEventListener('waiting', () => log('nativeLog', '⏳ Buffering...'));
+                video.addEventListener('playing', () => log('nativeLog', '🎬 Playing'));
+                video.addEventListener('stalled', () => log('nativeLog', '🚫 Stalled!'));
+                
+                video.play().catch(e => log('nativeLog', `❌ Play error: ${e.message}`));
+            } else {
+                log('nativeLog', '❌ Native HLS not supported in this browser');
+            }
+        }
+
+        function stopNative() {
+            const video = document.getElementById('nativeVideo');
+            video.src = '';
+            video.load();
+            log('nativeLog', '⏹️ Stopped');
+        }
+
+        // Test 2: Minimal HLS.js
+        function testMinimalHLS() {
+            const video = document.getElementById('hlsVideo');
+            const url = 'http://188.245.163.8:8083/hls/stream1/master.m3u8';
+            
+            log('hlsLog', 'Testing ultra-minimal HLS.js...');
+            
+            if (hls) {
+                hls.destroy();
+            }
+
+            // Absolute minimal config
+            const config = {
+                debug: true,
+                enableWorker: false, // Disable worker to see exact timing
+                lowLatencyMode: false, // Disable for debugging
+                startLevel: 4, // Start at 240p
+                maxBufferLength: 3, // Tiny buffer
+                maxMaxBufferLength: 5,
+                maxBufferSize: 5 * 1000 * 1000, // 5MB
+                liveSyncDurationCount: 1,
+                liveMaxLatencyDurationCount: 2,
+                abrEwmaFastLive: 1.0,
+                abrEwmaSlowLive: 3.0,
+                fragLoadingTimeOut: 30000,
+                manifestLoadingTimeOut: 15000
+            };
+
+            hls = new Hls(config);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                log('hlsLog', `✅ Manifest parsed: ${data.levels.length} levels`);
+                data.levels.forEach((level, i) => {
+                    log('hlsLog', `  Level ${i}: ${level.height}p @ ${Math.round(level.bitrate/1000)}k`);
+                });
+            });
+
+            hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                const level = hls.levels[data.level];
+                log('hlsLog', `🔄 Switched to: ${level.height}p (${Math.round(level.bitrate/1000)}k)`);
+            });
+
+            hls.on(Hls.Events.FRAG_LOADING, (event, data) => {
+                segmentStartTime = performance.now();
+                log('hlsLog', `📥 Loading segment: ${data.frag.url.split('/').pop()}`);
+            });
+
+            hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+                const loadTime = performance.now() - segmentStartTime;
+                document.getElementById('segmentTime').textContent = Math.round(loadTime);
+                log('hlsLog', `✅ Segment loaded in ${Math.round(loadTime)}ms (${data.payload.byteLength} bytes)`);
+            });
+
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                log('hlsLog', `❌ ERROR: ${data.type} - ${data.details}`);
+                if (data.fatal) {
+                    log('hlsLog', `💀 FATAL ERROR: ${data.details}`);
+                }
+            });
+
+            hls.on(Hls.Events.BUFFER_APPENDING, () => {
+                log('hlsLog', '📝 Appending to buffer...');
+            });
+
+            hls.on(Hls.Events.BUFFER_APPENDED, () => {
+                log('hlsLog', '✅ Buffer appended');
+                updateMetrics();
+            });
+
+            video.addEventListener('waiting', () => {
+                log('hlsLog', '⏳ VIDEO WAITING (buffering)');
+                updateMetrics();
+            });
+
+            video.addEventListener('playing', () => {
+                log('hlsLog', '🎬 VIDEO PLAYING');
+            });
+
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            
+            video.play().catch(e => log('hlsLog', `❌ Play error: ${e.message}`));
+            
+            // Start metrics updates
+            setInterval(updateMetrics, 500);
+        }
+
+        function stopHLS() {
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            const video = document.getElementById('hlsVideo');
+            video.src = '';
+            video.load();
+            log('hlsLog', '⏹️ Stopped');
+        }
+
+        function forceLowest() {
+            if (hls && hls.levels.length > 0) {
+                hls.currentLevel = hls.levels.length - 1; // Lowest quality
+                log('hlsLog', `🔻 Forced to lowest quality: ${hls.levels[hls.levels.length - 1].height}p`);
+            }
+        }
+
+        // Test 3: Direct segment analysis
+        function testDirectSegments() {
+            log('segmentLog', 'Testing direct segment loading speeds...');
+            
+            // Test master playlist fetch
+            const start1 = performance.now();
+            fetch('http://188.245.163.8:8083/hls/stream1/master.m3u8')
+                .then(response => {
+                    const time1 = performance.now() - start1;
+                    log('segmentLog', `📋 Master playlist: ${Math.round(time1)}ms`);
+                    return response.text();
+                })
+                .then(text => {
+                    log('segmentLog', `📋 Master playlist size: ${text.length} chars`);
+                    
+                    // Test individual quality playlist
+                    const start2 = performance.now();
+                    return fetch('http://188.245.163.8:8083/hls/stream1/4/index.m3u8');
+                })
+                .then(response => {
+                    const time2 = performance.now() - start1;
+                    log('segmentLog', `📋 Quality playlist: ${Math.round(time2)}ms`);
+                    return response.text();
+                })
+                .then(playlist => {
+                    log('segmentLog', `📋 Playlist content preview:`);
+                    const lines = playlist.split('\n').slice(0, 10);
+                    lines.forEach(line => {
+                        if (line.trim()) log('segmentLog', `  ${line}`);
+                    });
+                    
+                    // Extract segment URL and test direct download
+                    const segmentMatch = playlist.match(/segment_\d+\.ts/);
+                    if (segmentMatch) {
+                        const segmentUrl = `http://188.245.163.8:8083/hls/stream1/4/${segmentMatch[0]}`;
+                        log('segmentLog', `📥 Testing segment: ${segmentMatch[0]}`);
+                        
+                        const start3 = performance.now();
+                        fetch(segmentUrl)
+                            .then(response => {
+                                const time3 = performance.now() - start3;
+                                log('segmentLog', `✅ Segment loaded: ${Math.round(time3)}ms (${response.headers.get('content-length')} bytes)`);
+                            })
+                            .catch(err => {
+                                log('segmentLog', `❌ Segment error: ${err.message}`);
+                            });
+                    }
+                })
+                .catch(err => {
+                    log('segmentLog', `❌ Test failed: ${err.message}`);
+                });
+        }
+
+        function testPlaylistFetch() {
+            log('segmentLog', 'Testing playlist fetch speed (10 times)...');
+            
+            const times = [];
+            let completed = 0;
+            
+            for (let i = 0; i < 10; i++) {
+                const start = performance.now();
+                fetch(`http://188.245.163.8:8083/hls/stream1/master.m3u8?t=${Date.now()}&i=${i}`)
+                    .then(response => {
+                        const time = performance.now() - start;
+                        times.push(time);
+                        log('segmentLog', `📊 Fetch ${i + 1}: ${Math.round(time)}ms`);
+                        
+                        completed++;
+                        if (completed === 10) {
+                            const avg = times.reduce((a, b) => a + b, 0) / times.length;
+                            const min = Math.min(...times);
+                            const max = Math.max(...times);
+                            log('segmentLog', `📊 Results: Avg=${Math.round(avg)}ms, Min=${Math.round(min)}ms, Max=${Math.round(max)}ms`);
+                        }
+                    })
+                    .catch(err => {
+                        log('segmentLog', `❌ Fetch ${i + 1} failed: ${err.message}`);
+                    });
+            }
+        }
+
+        // Initialize
+        log('nativeLog', 'Ready for native HLS testing');
+        log('hlsLog', 'Ready for HLS.js testing');
+        log('segmentLog', 'Ready for direct segment analysis');
+    </script>
+</body>
+</html>

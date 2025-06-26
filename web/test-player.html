@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>StreamForge Dual Stream Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .stream-container { 
+            display: inline-block; 
+            width: 45%; 
+            margin: 2%; 
+            background: white; 
+            border-radius: 8px; 
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        video { width: 100%; height: auto; border-radius: 4px; }
+        .controls { margin-top: 10px; }
+        button { 
+            padding: 8px 16px; 
+            margin: 5px; 
+            border: none; 
+            border-radius: 4px; 
+            background: #007bff; 
+            color: white; 
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        .status { 
+            margin-top: 10px; 
+            padding: 10px; 
+            background: #f8f9fa; 
+            border-radius: 4px; 
+            font-size: 12px;
+        }
+        h2 { margin-top: 0; color: #333; }
+        .info { color: #666; font-size: 14px; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 StreamForge Dual Stream Test</h1>
+        <p class="info">Testing stream1 and stream3 with optimized HLS.js settings</p>
+        
+        <div class="stream-container">
+            <h2>📺 Stream 1</h2>
+            <video id="video1" controls muted></video>
+            <div class="controls">
+                <button onclick="loadStream1()">▶️ Load Stream 1</button>
+                <button onclick="stopStream1()">⏹️ Stop</button>
+            </div>
+            <div id="status1" class="status">Status: Ready to load</div>
+        </div>
+
+        <div class="stream-container">
+            <h2>📺 Stream 3</h2>
+            <video id="video3" controls muted></video>
+            <div class="controls">
+                <button onclick="loadStream3()">▶️ Load Stream 3</button>
+                <button onclick="stopStream3()">⏹️ Stop</button>
+            </div>
+            <div id="status3" class="status">Status: Ready to load</div>
+        </div>
+    </div>
+
+    <script>
+        let hls1, hls3;
+
+        // Optimized HLS.js config for live streaming
+        const hlsConfig = {
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: true,
+            liveSyncDurationCount: 3,
+            liveMaxLatencyDurationCount: 10,
+            liveDurationInfinity: true,
+            highBufferWatchdogPeriod: 3,
+            nudgeOffset: 0.1,
+            nudgeMaxRetry: 3,
+            maxBufferSize: 60 * 1000 * 1000, // 60MB
+            maxBufferLength: 30, // 30 seconds
+            maxMaxBufferLength: 60, // 60 seconds  
+            startLevel: -1, // Auto quality selection
+            testBandwidth: true,
+            abrEwmaFastLive: 3.0,
+            abrEwmaSlowLive: 9.0,
+            abrMaxWithRealBitrate: false,
+            stretchShortVideoTrack: true,
+            maxAudioFramesDrift: 1,
+            forceKeyFrameOnDiscontinuity: true,
+            capLevelToPlayerSize: true
+        };
+
+        function updateStatus(statusId, message) {
+            document.getElementById(statusId).innerHTML = message;
+        }
+
+        function loadStream1() {
+            const video = document.getElementById('video1');
+            const url = 'http://188.245.163.8:8083/hls/stream1/master.m3u8';
+            
+            if (hls1) {
+                hls1.destroy();
+            }
+
+            if (Hls.isSupported()) {
+                hls1 = new Hls(hlsConfig);
+                
+                hls1.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    updateStatus('status1', '✅ Media attached');
+                });
+
+                hls1.on(Hls.Events.MANIFEST_PARSED, () => {
+                    updateStatus('status1', '✅ Manifest parsed, starting playback...');
+                    video.play().catch(e => {
+                        updateStatus('status1', '⚠️ Autoplay prevented, click play button');
+                    });
+                });
+
+                hls1.on(Hls.Events.ERROR, (event, data) => {
+                    updateStatus('status1', `❌ Error: ${data.type} - ${data.details}`);
+                    console.error('HLS1 Error:', data);
+                });
+
+                hls1.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    updateStatus('status1', `🔄 Quality switched to level ${data.level}`);
+                });
+
+                hls1.loadSource(url);
+                hls1.attachMedia(video);
+                updateStatus('status1', '🔄 Loading stream1...');
+            } else {
+                updateStatus('status1', '❌ HLS not supported in this browser');
+            }
+        }
+
+        function loadStream3() {
+            const video = document.getElementById('video3');
+            const url = 'http://188.245.163.8:8083/hls/stream3/master.m3u8';
+            
+            if (hls3) {
+                hls3.destroy();
+            }
+
+            if (Hls.isSupported()) {
+                hls3 = new Hls(hlsConfig);
+                
+                hls3.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    updateStatus('status3', '✅ Media attached');
+                });
+
+                hls3.on(Hls.Events.MANIFEST_PARSED, () => {
+                    updateStatus('status3', '✅ Manifest parsed, starting playback...');
+                    video.play().catch(e => {
+                        updateStatus('status3', '⚠️ Autoplay prevented, click play button');
+                    });
+                });
+
+                hls3.on(Hls.Events.ERROR, (event, data) => {
+                    updateStatus('status3', `❌ Error: ${data.type} - ${data.details}`);
+                    console.error('HLS3 Error:', data);
+                });
+
+                hls3.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    updateStatus('status3', `🔄 Quality switched to level ${data.level}`);
+                });
+
+                hls3.loadSource(url);
+                hls3.attachMedia(video);
+                updateStatus('status3', '🔄 Loading stream3...');
+            } else {
+                updateStatus('status3', '❌ HLS not supported in this browser');
+            }
+        }
+
+        function stopStream1() {
+            if (hls1) {
+                hls1.destroy();
+                hls1 = null;
+            }
+            document.getElementById('video1').src = '';
+            updateStatus('status1', '⏹️ Stream stopped');
+        }
+
+        function stopStream3() {
+            if (hls3) {
+                hls3.destroy();
+                hls3 = null;
+            }
+            document.getElementById('video3').src = '';
+            updateStatus('status3', '⏹️ Stream stopped');
+        }
+    </script>
+</body>
+</html> 

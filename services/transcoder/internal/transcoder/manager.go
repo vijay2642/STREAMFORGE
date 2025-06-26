@@ -42,14 +42,14 @@ type Manager struct {
 
 // NewManager creates a new transcoder manager
 func NewManager(rtmpURL, outputDir string) *Manager {
-	// Define quality profiles matching the JavaScript reference
+	// Define quality profiles optimized for low-buffering concurrent streaming
 	qualities := []Quality{
-		{Name: "1080p", Resolution: "1920x1080", VideoBitrate: "4500k", MaxBitrate: "5000k", BufSize: "6750k"},
-		{Name: "720p", Resolution: "1280x720", VideoBitrate: "2500k", MaxBitrate: "2750k", BufSize: "3750k"},
-		{Name: "480p", Resolution: "854x480", VideoBitrate: "1500k", MaxBitrate: "1600k", BufSize: "2250k"},
-		{Name: "360p", Resolution: "640x360", VideoBitrate: "800k", MaxBitrate: "856k", BufSize: "1200k"},
-		{Name: "240p", Resolution: "426x240", VideoBitrate: "400k", MaxBitrate: "450k", BufSize: "600k"},
-		{Name: "144p", Resolution: "256x144", VideoBitrate: "200k", MaxBitrate: "250k", BufSize: "300k"},
+		{Name: "1080p", Resolution: "1920x1080", VideoBitrate: "3500k", MaxBitrate: "3850k", BufSize: "7000k"},
+		{Name: "720p", Resolution: "1280x720", VideoBitrate: "2000k", MaxBitrate: "2200k", BufSize: "4000k"},
+		{Name: "480p", Resolution: "854x480", VideoBitrate: "1200k", MaxBitrate: "1320k", BufSize: "2400k"},
+		{Name: "360p", Resolution: "640x360", VideoBitrate: "800k", MaxBitrate: "880k", BufSize: "1600k"},
+		{Name: "240p", Resolution: "426x240", VideoBitrate: "620k", MaxBitrate: "680k", BufSize: "1240k"},
+		{Name: "144p", Resolution: "256x144", VideoBitrate: "400k", MaxBitrate: "440k", BufSize: "800k"},
 	}
 
 	return &Manager{
@@ -195,59 +195,46 @@ func (m *Manager) StopAll() {
 	m.processes = make(map[string]*TranscoderProcess)
 }
 
-// buildFFmpegArgs builds the FFmpeg arguments for multi-quality transcoding
+// buildFFmpegArgs builds simple relay to nginx-rtmp
 func (m *Manager) buildFFmpegArgs(inputURL, outputDir string) []string {
+	// Simple relay to nginx-rtmp for HLS generation
 	args := []string{
 		"-y", // overwrite output files
 		"-i", inputURL,
+		"-c", "copy", // Copy streams without re-encoding
+		"-f", "flv", // Output FLV for RTMP
+		"rtmp://localhost:1935/live/" + filepath.Base(outputDir), // Send to nginx-rtmp
 	}
-
-	// Add video/audio mapping and encoding for each quality
-	for i, quality := range m.qualities {
-		// Map video and audio streams
-		args = append(args, "-map", "0:v", "-map", "0:a")
-
-		// Video encoding settings
-		args = append(args,
-			fmt.Sprintf("-c:v:%d", i), "libx264",
-			fmt.Sprintf("-s:v:%d", i), quality.Resolution,
-			"-preset", "veryfast",
-			fmt.Sprintf("-b:v:%d", i), quality.VideoBitrate,
-			fmt.Sprintf("-maxrate:v:%d", i), quality.MaxBitrate,
-			fmt.Sprintf("-bufsize:v:%d", i), quality.BufSize,
-			"-g", "50",
-			"-sc_threshold", "0",
-		)
-
-		// Audio encoding (copy)
-		args = append(args, fmt.Sprintf("-c:a:%d", i), "copy")
-	}
-
-	// HLS settings
-	args = append(args,
-		"-f", "hls",
-		"-hls_time", "4",
-		"-hls_playlist_type", "event",
-		"-hls_flags", "independent_segments",
-		"-hls_segment_filename", filepath.Join(outputDir, "%v", "seg_%03d.ts"),
-		"-master_pl_name", "master.m3u8",
-		"-var_stream_map", m.buildVarStreamMap(),
-		filepath.Join(outputDir, "%v", "index.m3u8"),
-	)
 
 	return args
 }
 
-// buildVarStreamMap creates the variant stream mapping string
-func (m *Manager) buildVarStreamMap() string {
-	var streamMap string
-	for i := range m.qualities {
-		if i > 0 {
-			streamMap += " "
-		}
-		streamMap += fmt.Sprintf("v:%d,a:%d", i, i)
+// getProfile returns the H.264 profile for a quality level
+func (m *Manager) getProfile(index int) string {
+	if index <= 2 { // 1080p, 720p, 480p
+		return "main"
 	}
-	return streamMap
+	return "baseline" // 360p, 240p, 144p
+}
+
+// getLevel returns the H.264 level for a quality level
+func (m *Manager) getLevel(index int) string {
+	switch index {
+	case 0: // 1080p
+		return "4.0"
+	case 1: // 720p
+		return "3.1"
+	default:
+		return "3.0"
+	}
+}
+
+// getAudioBitrate returns the audio bitrate for a quality level
+func (m *Manager) getAudioBitrate(index int) string {
+	if index <= 2 { // 1080p, 720p, 480p
+		return "128k"
+	}
+	return "96k" // Lower quality levels
 }
 
 // monitorProcess monitors an FFmpeg process and handles its lifecycle

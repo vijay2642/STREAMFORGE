@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/streamforge/platform/pkg/config"
 	"github.com/streamforge/platform/pkg/models"
 	"github.com/streamforge/platform/services/user-management/internal/repository"
@@ -65,11 +66,11 @@ func (s *UserService) AuthenticateUser(email, password string) (string, error) {
 	return tokenString, nil
 }
 
-func (s *UserService) GetUserByID(id uint) (*models.User, error) {
+func (s *UserService) GetUserByID(id uuid.UUID) (*models.User, error) {
 	return s.repo.GetByID(id)
 }
 
-func (s *UserService) UpdateUser(id uint, username, email string) (*models.User, error) {
+func (s *UserService) UpdateUser(id uuid.UUID, username, email string) (*models.User, error) {
 	user, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -85,6 +86,6 @@ func (s *UserService) UpdateUser(id uint, username, email string) (*models.User,
 	return s.repo.Update(user)
 }
 
-func (s *UserService) DeleteUser(id uint) error {
+func (s *UserService) DeleteUser(id uuid.UUID) error {
 	return s.repo.Delete(id)
 }

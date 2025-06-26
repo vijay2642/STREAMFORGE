@@ -1,0 +1,109 @@
+{
+  "streams": {
+    "stream1": {
+      "name": "stream1",
+      "rtmp_url": "rtmp://188.245.163.8:1935/live/stream1",
+      "hls_path": "/tmp/hls_shared/stream1",
+      "status": "running",
+      "created": "2025-06-26T03:52:28.939057",
+      "qualities": [
+        {
+          "name": "1080p",
+          "resolution": "1920x1080",
+          "bitrate": "5000k",
+          "maxrate": "5500k",
+          "bufsize": "10000k"
+        },
+        {
+          "name": "720p",
+          "resolution": "1280x720",
+          "bitrate": "2800k",
+          "maxrate": "3100k",
+          "bufsize": "5600k"
+        },
+        {
+          "name": "480p",
+          "resolution": "854x480",
+          "bitrate": "1700k",
+          "maxrate": "1900k",
+          "bufsize": "3400k"
+        },
+        {
+          "name": "360p",
+          "resolution": "640x360",
+          "bitrate": "1000k",
+          "maxrate": "1100k",
+          "bufsize": "2000k"
+        },
+        {
+          "name": "240p",
+          "resolution": "426x240",
+          "bitrate": "600k",
+          "maxrate": "650k",
+          "bufsize": "1200k"
+        },
+        {
+          "name": "144p",
+          "resolution": "256x144",
+          "bitrate": "380k",
+          "maxrate": "420k",
+          "bufsize": "760k"
+        }
+      ]
+    },
+    "stream2": {
+      "name": "stream2",
+      "rtmp_url": "rtmp://188.245.163.8:1935/live/stream2",
+      "hls_path": "/tmp/hls_shared/stream2",
+      "status": "running",
+      "created": "2025-06-26T04:03:17.561505",
+      "qualities": [
+        {
+          "name": "1080p",
+          "resolution": "1920x1080",
+          "bitrate": "5000k",
+          "maxrate": "5500k",
+          "bufsize": "10000k"
+        },
+        {
+          "name": "720p",
+          "resolution": "1280x720",
+          "bitrate": "2800k",
+          "maxrate": "3100k",
+          "bufsize": "5600k"
+        },
+        {
+          "name": "480p",
+          "resolution": "854x480",
+          "bitrate": "1700k",
+          "maxrate": "1900k",
+          "bufsize": "3400k"
+        },
+        {
+          "name": "360p",
+          "resolution": "640x360",
+          "bitrate": "1000k",
+          "maxrate": "1100k",
+          "bufsize": "2000k"
+        },
+        {
+          "name": "240p",
+          "resolution": "426x240",
+          "bitrate": "600k",
+          "maxrate": "650k",
+          "bufsize": "1200k"
+        },
+        {
+          "name": "144p",
+          "resolution": "256x144",
+          "bitrate": "380k",
+          "maxrate": "420k",
+          "bufsize": "760k"
+        }
+      ]
+    }
+  },
+  "base_port": 1935,
+  "hls_dir": "/tmp/hls_shared",
+  "saved_at": "2025-06-26T05:24:09.134909"
+}

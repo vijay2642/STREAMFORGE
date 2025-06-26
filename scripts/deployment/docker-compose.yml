@@ -1,0 +1,132 @@
+version: '3.8'
+
+networks:
+  streamforge-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  hls_data:
+  dash_data:
+  recordings_data:
+
+services:
+  # --- Infrastructure ---
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: streamforge
+      POSTGRES_USER: streamforge
+      POSTGRES_PASSWORD: streamforge123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+
+  # --- Stream Ingestion ---
+  nginx-rtmp:
+    build:
+      context: .
+      dockerfile: services/nginx-rtmp/Dockerfile
+    ports:
+      - "1935:1935"  # RTMP
+      - "8090:8080"  # HTTP for HLS/DASH/Stats (keep for local use)
+      - "80:8080"    # NEW - expose HLS/HTTP on port 80 for external access
+    volumes:
+      - hls_data:/tmp/hls
+      - dash_data:/tmp/dash
+      - recordings_data:/tmp/recordings
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+
+  # --- Core Services ---
+  stream-processing:
+    build:
+      context: .
+      dockerfile: services/stream-processing/Dockerfile
+    environment:
+      - PORT=8081
+      - DATABASE_URL=postgresql://streamforge:streamforge123@postgres:5432/streamforge
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+
+  transcoder:
+    build:
+      context: .
+      dockerfile: services/transcoder/Dockerfile
+    environment:
+      - PORT=8080
+      - OUTPUT_DIR=/tmp/hls
+      - RTMP_URL=rtmp://nginx-rtmp:1935/live
+      - DATABASE_URL=postgresql://streamforge:streamforge123@postgres:5432/streamforge
+    ports:
+      - "8082:8080"
+    volumes:
+      - hls_data:/tmp/hls
+    depends_on:
+      - postgres
+      - nginx-rtmp
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+
+  user-management:
+    build:
+      context: .
+      dockerfile: services/user-management/Dockerfile
+    environment:
+      - PORT=8083
+      - DATABASE_URL=postgresql://streamforge:streamforge123@postgres:5432/streamforge
+    ports:
+      - "8083:8083"
+    depends_on:
+      - postgres
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+
+  web-player:
+    image: nginx:alpine           # tiny static-file server
+    volumes:
+      - ./web:/usr/share/nginx/html:ro   # serve files in ./web
+    ports:
+      - "3000:80"                 # host:container
+    networks:
+      - streamforge-network
+    restart: unless-stopped
+  # --- Frontend (Blocked) ---
+  # The web-dashboard requires the 'api-gateway' service, which is missing.
+  # It is included here but commented out until the gateway is available.
+  # web-dashboard:
+  #   build:
+  #     context: .
+  #     dockerfile: web/Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - REACT_APP_API_URL=http://localhost:8080 # This should point to the API Gateway
+  #   depends_on:
+  #     - api-gateway # This service is missing
+  #   networks:
+  #     - streamforge-network

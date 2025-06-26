@@ -36,7 +36,7 @@ func main() {
 	}
 
 	// Initialize service
-	userService := service.NewUserService(repo, cfg)
+	userService := service.NewUserService(cfg, repo)
 
 	// Setup HTTP server
 	gin.SetMode(gin.ReleaseMode)
@@ -44,7 +44,7 @@ func main() {
 	router.Use(gin.Logger(), gin.Recovery())
 
 	// Initialize handlers
-	handler := handlers.NewHandler(userService, cfg)
+	handler := handlers.NewHandler(cfg, userService)
 
 	// Health check
 	router.GET("/health", handler.HealthCheck)
@@ -54,20 +54,16 @@ func main() {
 	{
 		public.POST("/users/register", handler.Register)
 		public.POST("/users/login", handler.Login)
-		public.POST("/users/refresh", handler.RefreshToken)
+		
 	}
 
 	// Protected routes (auth required)
-	protected := router.Group("/api/v1")
-	protected.Use(handler.AuthMiddleware())
-	{
-		protected.GET("/users/profile", handler.GetProfile)
-		protected.PUT("/users/profile", handler.UpdateProfile)
-		protected.DELETE("/users/profile", handler.DeleteProfile)
-		protected.POST("/users/logout", handler.Logout)
-		protected.GET("/users/:id", handler.GetUserByID)
-		protected.GET("/users", handler.GetUsers)
-	}
+	// Protected routes placeholder (authentication middleware can be added later)
+protected := router.Group("/api/v1")
+{
+    protected.GET("/users/:id", handler.GetUser)
+    protected.PUT("/users/:id", handler.UpdateUser)
+}
 
 	// Start HTTP server
 	server := &http.Server{

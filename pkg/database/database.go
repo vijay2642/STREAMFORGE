@@ -5,10 +5,10 @@ import (
 	"os"
 	"time"
 
+	"gorm.io/driver/sqlite"
 	"github.com/streamforge/platform/pkg/config"
 	"github.com/streamforge/platform/pkg/logger"
 	"github.com/streamforge/platform/pkg/models"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
 )
@@ -31,10 +31,13 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 		gormLogger = glogger.Default.LogMode(glogger.Silent)
 	}
 
-	// For now, we'll use SQLite for simplicity
-	// Database file will be created in the data directory
+	// Use file-based SQLite database (CGO-free driver)
+	// Ensure data directory exists
+	if err := CreateDataDirectory(); err != nil {
+		return nil, err
+	}
 	dbPath := "./data/streamforge.db"
-
+	logger.Info("Connecting to SQLite database at", dbPath)
 	db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: gormLogger,
 	})
@@ -49,13 +52,12 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	// SQLite doesn't support connection pooling in the same way as PostgreSQL
-	// But we can configure some basic settings
-	sqlDB.SetMaxOpenConns(1) // SQLite only supports one writer
+	// Configure SQLite connection settings
+	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	logger.Info("Connected to SQLite database:", dbPath)
+	logger.Info("Connected to SQLite database")
 
 	database := &Database{db: db}
 

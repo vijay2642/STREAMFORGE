@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nginx-RTMP HLS Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            background: #222;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #555;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .log {
+            background: #111;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Nginx-RTMP HLS Test</h1>
+    <p>Testing nginx-rtmp direct HLS generation</p>
+
+    <video id="video" controls muted playsinline></video>
+    
+    <div class="controls">
+        <button onclick="testStream1()">📺 Test Stream1</button>
+        <button onclick="testStream2()">📺 Test Stream2</button>
+        <button onclick="stopAll()">⏹️ Stop</button>
+    </div>
+
+    <div id="log" class="log">Ready for nginx-rtmp test...</div>
+
+    <script>
+        let hls = null;
+
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${timestamp}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function testStream1() {
+            const video = document.getElementById('video');
+            const url = 'http://188.245.163.8:8080/hls/stream1.m3u8';
+            
+            log('🚀 Testing nginx-rtmp stream1');
+            loadStream(url);
+        }
+
+        function testStream2() {
+            const video = document.getElementById('video');
+            const url = 'http://188.245.163.8:8080/hls/stream2.m3u8';
+            
+            log('🚀 Testing nginx-rtmp stream2');
+            loadStream(url);
+        }
+
+        function loadStream(url) {
+            const video = document.getElementById('video');
+            
+            if (hls) {
+                hls.destroy();
+            }
+
+            // Simple HLS.js config
+            const config = {
+                debug: true,
+                enableWorker: false,
+                lowLatencyMode: false,
+                maxBufferLength: 3,
+                maxMaxBufferLength: 6,
+                liveSyncDurationCount: 1
+            };
+
+            hls = new Hls(config);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                log('✅ Manifest loaded');
+            });
+
+            hls.on(Hls.Events.FRAG_LOADING, (event, data) => {
+                const segmentName = data.frag.url.split('/').pop();
+                log(`📥 Loading: ${segmentName}`);
+            });
+
+            hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+                log(`✅ Loaded in ${Math.round(data.stats.loading.end - data.stats.loading.start)}ms`);
+            });
+
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                log(`❌ Error: ${data.details}`);
+            });
+
+            video.addEventListener('waiting', () => {
+                log('⏳ VIDEO BUFFERING');
+            });
+
+            video.addEventListener('playing', () => {
+                log('🎬 VIDEO PLAYING');
+            });
+
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            
+            video.play().catch(e => log(`❌ Play error: ${e.message}`));
+        }
+
+        function stopAll() {
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            const video = document.getElementById('video');
+            video.src = '';
+            video.load();
+            log('⏹️ Stopped');
+        }
+
+        log('Ready to test nginx-rtmp HLS streams');
+    </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datarhei-Inspired HLS Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            background: #222;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #555;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .log {
+            background: #111;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Datarhei-Inspired Stream Test</h1>
+    <p>Testing simplified HLS generation approach</p>
+
+    <video id="video" controls muted playsinline></video>
+    
+    <div class="controls">
+        <button onclick="startProcess()">🚀 Start HLS Process</button>
+        <button onclick="testStream()">📺 Test Stream</button>
+        <button onclick="stopProcess()">⏹️ Stop Process</button>
+    </div>
+
+    <div id="log" class="log">Ready for datarhei-inspired test...</div>
+
+    <script>
+        let hls = null;
+
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${timestamp}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function startProcess() {
+            try {
+                log('🚀 Starting simplified HLS process...');
+                
+                // Create a simple process configuration
+                const processConfig = {
+                    id: "simple_hls",
+                    input_url: "rtmp://localhost:1935/live/stream1",
+                    output_format: "hls",
+                    segments: 3,
+                    segment_duration: 3
+                };
+                
+                const response = await fetch('http://188.245.163.8:8083/process/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(processConfig)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    log('✅ Process started: ' + JSON.stringify(result));
+                } else {
+                    log('❌ Failed to start process');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message);
+            }
+        }
+
+        async function testStream() {
+            const video = document.getElementById('video');
+            const url = 'http://188.245.163.8:8083/hls/simple_hls.m3u8';
+            
+            log('📺 Testing simplified HLS stream');
+            
+            if (hls) {
+                hls.destroy();
+            }
+
+            // Ultra-minimal HLS.js config
+            const config = {
+                debug: false,
+                enableWorker: false,
+                lowLatencyMode: true,
+                maxBufferLength: 1,
+                maxMaxBufferLength: 2,
+                liveSyncDurationCount: 1
+            };
+
+            hls = new Hls(config);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                log('✅ Simplified manifest loaded');
+            });
+
+            hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+                log(`✅ Segment loaded in ${Math.round(data.stats.loading.end - data.stats.loading.start)}ms`);
+            });
+
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                log(`❌ Error: ${data.details}`);
+            });
+
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            
+            video.play().catch(e => log(`❌ Play error: ${e.message}`));
+        }
+
+        async function stopProcess() {
+            try {
+                log('⏹️ Stopping HLS process...');
+                
+                const response = await fetch('http://188.245.163.8:8083/process/stop/simple_hls', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    log('✅ Process stopped');
+                } else {
+                    log('❌ Failed to stop process');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message);
+            }
+        }
+
+        log('Ready to test datarhei-inspired streaming');
+    </script>
+</body>
+</html>

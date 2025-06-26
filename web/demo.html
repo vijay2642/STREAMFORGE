@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamForge Live Demo - Dual Stream Platform</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px 20px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .demo-stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .main-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .streams-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .stream-container {
+            background: rgba(26, 26, 26, 0.95);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stream-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+            background-size: 200% 100%;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { background-position: 200% 0; }
+            50% { background-position: -200% 0; }
+        }
+
+        .stream-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(102, 126, 234, 0.3);
+        }
+
+        .stream-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .stream-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stream-icon {
+            font-size: 1.8rem;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 68, 68, 0.2);
+            padding: 8px 15px;
+            border-radius: 25px;
+            border: 1px solid #ff4444;
+        }
+
+        .live-dot {
+            width: 10px;
+            height: 10px;
+            background: #ff4444;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        .live-text {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #ff4444;
+        }
+
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .video-player {
+            width: 100%;
+            height: 300px;
+            background: #000;
+            border-radius: 12px;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+
+        .video-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .play-button {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            margin-bottom: 15px;
+        }
+
+        .play-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.6);
+        }
+
+        .play-button::after {
+            content: '▶';
+            font-size: 24px;
+            color: white;
+            margin-left: 3px;
+        }
+
+        .overlay-text {
+            color: #ccc;
+            text-align: center;
+            max-width: 200px;
+        }
+
+        .controls-panel {
+            background: rgba(15, 15, 15, 0.8);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-label {
+            font-size: 0.9rem;
+            color: #ccc;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .quality-selector {
+            width: 100%;
+            padding: 10px 15px;
+            background: rgba(40, 40, 40, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .quality-selector:hover, .quality-selector:focus {
+            border-color: #667eea;
+            background: rgba(50, 50, 50, 0.9);
+            outline: none;
+        }
+
+        .timeline-container {
+            margin: 15px 0;
+        }
+
+        .timeline-wrapper {
+            position: relative;
+            height: 40px;
+            background: rgba(40, 40, 40, 0.6);
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .timeline-wrapper:hover {
+            background: rgba(50, 50, 50, 0.8);
+        }
+
+        .timeline-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 20px;
+            width: 0%;
+            transition: width 0.1s ease;
+            position: relative;
+        }
+
+        .timeline-handle {
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: grab;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .timeline-handle:active {
+            cursor: grabbing;
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        .timeline-time {
+            position: absolute;
+            top: 50%;
+            left: 15px;
+            transform: translateY(-50%);
+            font-size: 0.8rem;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(60, 60, 60, 0.8);
+            color: #ccc;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(80, 80, 80, 0.9);
+            color: #fff;
+        }
+
+        .status-panel {
+            background: rgba(15, 15, 15, 0.6);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .demo-features {
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .features-title {
+            font-size: 2rem;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .feature-card {
+            background: rgba(26, 26, 26, 0.8);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-3px);
+            border-color: #667eea;
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .feature-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .feature-description {
+            color: #ccc;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+            .streams-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .demo-stats {
+                gap: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-container {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>🎬 StreamForge Live Demo</h1>
+            <p class="subtitle">Multi-Quality Adaptive Live Streaming Platform</p>
+            <div class="demo-stats">
+                <div class="stat-item">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">Live Streams</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">6</div>
+                    <div class="stat-label">Quality Levels</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">DVR</div>
+                    <div class="stat-label">Timeline Seeking</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">Zero</div>
+                    <div class="stat-label">Buffering</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="streams-grid">
+            <!-- Stream 1 -->
+            <div class="stream-container">
+                <div class="stream-header">
+                    <div class="stream-title">
+                        <span class="stream-icon">📺</span>
+                        Stream 1
+                    </div>
+                    <div class="live-indicator">
+                        <div class="live-dot"></div>
+                        <span class="live-text">LIVE</span>
+                    </div>
+                </div>
+                
+                <div class="video-wrapper">
+                    <video id="video1" class="video-player" controls muted playsinline></video>
+                    <div class="video-overlay" id="overlay1">
+                        <button class="play-button" onclick="loadStream(1)"></button>
+                        <div class="overlay-text">Click to start Stream 1</div>
+                    </div>
+                </div>
+
+                <div class="controls-panel">
+                    <div class="control-group">
+                        <label class="control-label">Quality Selection</label>
+                        <select class="quality-selector" id="quality1" onchange="setQuality(1, this.value)">
+                            <option value="-1">Auto (Adaptive)</option>
+                            <option value="0">1080p (Best)</option>
+                            <option value="1">720p (High)</option>
+                            <option value="2">480p (Medium)</option>
+                            <option value="3">360p (Low)</option>
+                            <option value="4">240p (Lowest)</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">DVR Timeline</label>
+                        <div class="timeline-container">
+                            <div class="timeline-wrapper" id="timeline1" onclick="seekToPosition(1, event)">
+                                <div class="timeline-progress" id="progress1">
+                                    <div class="timeline-handle"></div>
+                                </div>
+                                <div class="timeline-time" id="time1">00:00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="goLive(1)">
+                            🔴 GO LIVE
+                        </button>
+                        <button class="btn btn-secondary" onclick="stopStream(1)">
+                            ⏹️ Stop
+                        </button>
+                    </div>
+
+                    <div class="status-panel" id="status1">Ready to load Stream 1</div>
+                </div>
+            </div>
+
+            <!-- Stream 2 -->
+            <div class="stream-container">
+                <div class="stream-header">
+                    <div class="stream-title">
+                        <span class="stream-icon">📹</span>
+                        Stream 2
+                    </div>
+                    <div class="live-indicator">
+                        <div class="live-dot"></div>
+                        <span class="live-text">LIVE</span>
+                    </div>
+                </div>
+                
+                <div class="video-wrapper">
+                    <video id="video2" class="video-player" controls muted playsinline></video>
+                    <div class="video-overlay" id="overlay2">
+                        <button class="play-button" onclick="loadStream(2)"></button>
+                        <div class="overlay-text">Click to start Stream 2</div>
+                    </div>
+                </div>
+
+                <div class="controls-panel">
+                    <div class="control-group">
+                        <label class="control-label">Quality Selection</label>
+                        <select class="quality-selector" id="quality2" onchange="setQuality(2, this.value)">
+                            <option value="-1">Auto (Adaptive)</option>
+                            <option value="0">1080p (Best)</option>
+                            <option value="1">720p (High)</option>
+                            <option value="2">480p (Medium)</option>
+                            <option value="3">360p (Low)</option>
+                            <option value="4">240p (Lowest)</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">DVR Timeline</label>
+                        <div class="timeline-container">
+                            <div class="timeline-wrapper" id="timeline2" onclick="seekToPosition(2, event)">
+                                <div class="timeline-progress" id="progress2">
+                                    <div class="timeline-handle"></div>
+                                </div>
+                                <div class="timeline-time" id="time2">00:00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="goLive(2)">
+                            🔴 GO LIVE
+                        </button>
+                        <button class="btn btn-secondary" onclick="stopStream(2)">
+                            ⏹️ Stop
+                        </button>
+                    </div>
+
+                    <div class="status-panel" id="status2">Ready to load Stream 2</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-features">
+            <h2 class="features-title">Platform Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-title">Zero-Latency Streaming</div>
+                    <div class="feature-description">Ultra-low latency live streaming with optimized HLS delivery and adaptive bitrate switching.</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <div class="feature-title">Smart Quality Selection</div>
+                    <div class="feature-description">Automatic quality adaptation based on bandwidth, with manual override for specific quality levels.</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⏮️</div>
+                    <div class="feature-title">DVR Timeline Seeking</div>
+                    <div class="feature-description">Seek through live stream history with timeline scrubbing and instant "Go Live" functionality.</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <div class="feature-title">Concurrent Streaming</div>
+                    <div class="feature-description">Handle multiple simultaneous streams without buffering or performance degradation.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        const players = {};
+        const streamUrls = {
+            1: 'http://188.245.163.8:8083/hls/stream1/master.m3u8',
+            2: 'http://188.245.163.8:8083/hls/stream2/master.m3u8'
+        };
+
+        // Optimized HLS.js configuration for low-latency with anti-buffering
+        const hlsConfig = {
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30,  // Reduced from 90
+            liveSyncDurationCount: 2,  // Reduced from 3
+            liveMaxLatencyDurationCount: 6,  // Reduced from 10
+            liveDurationInfinity: true,
+            highBufferWatchdogPeriod: 2,  // Reduced from 3
+            nudgeOffset: 0.05,  // Reduced from 0.1
+            nudgeMaxRetry: 5,  // Increased from 3
+            maxBufferSize: 30 * 1000 * 1000,  // Reduced from 60MB to 30MB
+            maxBufferLength: 15,  // Reduced from 30 to 15 seconds
+            maxMaxBufferLength: 30,  // Reduced from 60 to 30 seconds
+            startLevel: 3,  // Start with 360p instead of auto
+            testBandwidth: true,
+            abrEwmaFastLive: 5.0,  // Increased for faster adaptation
+            abrEwmaSlowLive: 15.0,  // Increased for more stable adaptation
+            abrMaxWithRealBitrate: true,  // Changed to true
+            stretchShortVideoTrack: true,
+            maxAudioFramesDrift: 2,  // Increased tolerance
+            forceKeyFrameOnDiscontinuity: true,
+            capLevelToPlayerSize: true,
+            startPosition: -1,
+            // Anti-buffering settings
+            manifestLoadingTimeOut: 10000,
+            manifestLoadingMaxRetry: 4,
+            levelLoadingTimeOut: 10000,
+            levelLoadingMaxRetry: 4,
+            fragLoadingTimeOut: 20000,
+            fragLoadingMaxRetry: 6,
+            // Conservative bandwidth estimation
+            abrBandWidthFactor: 0.8,  // Use 80% of estimated bandwidth
+            abrBandWidthUpFactor: 0.7   // Even more conservative for upgrades
+        };
+
+        function updateStatus(streamId, message) {
+            const statusElement = document.getElementById(`status${streamId}`);
+            const timestamp = new Date().toLocaleTimeString();
+            statusElement.innerHTML = `[${timestamp}] ${message}`;
+        }
+
+        function hideOverlay(streamId) {
+            document.getElementById(`overlay${streamId}`).classList.add('hidden');
+        }
+
+        function showOverlay(streamId) {
+            document.getElementById(`overlay${streamId}`).classList.remove('hidden');
+        }
+
+        function loadStream(streamId) {
+            const video = document.getElementById(`video${streamId}`);
+            const url = streamUrls[streamId];
+
+            // Destroy existing player if any
+            if (players[streamId]) {
+                players[streamId].destroy();
+            }
+
+            if (Hls.isSupported()) {
+                players[streamId] = new Hls(hlsConfig);
+                const hls = players[streamId];
+
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    updateStatus(streamId, '✅ Media attached');
+                });
+
+                hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                    updateStatus(streamId, `✅ Manifest parsed (${data.levels.length} quality levels)`);
+                    hideOverlay(streamId);
+                    video.play().catch(e => {
+                        updateStatus(streamId, '⚠️ Autoplay prevented - click play button');
+                    });
+                });
+
+                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    const level = hls.levels[data.level];
+                    updateStatus(streamId, `🔄 Quality: ${level.height}p (${Math.round(level.bitrate/1000)}kbps)`);
+                });
+
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        updateStatus(streamId, `❌ Fatal error: ${data.type} - ${data.details}`);
+                        showOverlay(streamId);
+                    } else {
+                        updateStatus(streamId, `⚠️ Warning: ${data.type} - ${data.details}`);
+                    }
+                });
+
+                hls.on(Hls.Events.FRAG_LOADED, () => {
+                    updateTimeDisplay(streamId);
+                });
+
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                updateStatus(streamId, `🔄 Loading Stream ${streamId}...`);
+
+                // Update timeline periodically
+                video.addEventListener('timeupdate', () => updateTimeDisplay(streamId));
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                hideOverlay(streamId);
+                updateStatus(streamId, '✅ Native HLS support detected');
+            } else {
+                updateStatus(streamId, '❌ HLS not supported in this browser');
+            }
+        }
+
+        function setQuality(streamId, level) {
+            const hls = players[streamId];
+            if (!hls) return;
+
+            const levelInt = parseInt(level);
+            if (levelInt === -1) {
+                hls.currentLevel = -1;
+                updateStatus(streamId, '🎯 Switched to automatic quality selection');
+            } else {
+                hls.currentLevel = levelInt;
+                const quality = hls.levels[levelInt];
+                updateStatus(streamId, `🎯 Manual quality: ${quality.height}p (${Math.round(quality.bitrate/1000)}kbps)`);
+            }
+        }
+
+        function updateTimeDisplay(streamId) {
+            const video = document.getElementById(`video${streamId}`);
+            const timeElement = document.getElementById(`time${streamId}`);
+            const progressElement = document.getElementById(`progress${streamId}`);
+
+            if (video.duration && video.buffered.length > 0) {
+                const currentTime = video.currentTime;
+                const duration = video.duration;
+                const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                
+                // Calculate progress percentage
+                const progressPercent = (currentTime / bufferedEnd) * 100;
+                progressElement.style.width = Math.min(progressPercent, 100) + '%';
+                
+                // Update time display
+                const mins = Math.floor(currentTime / 60);
+                const secs = Math.floor(currentTime % 60);
+                timeElement.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+        }
+
+        function seekToPosition(streamId, event) {
+            const video = document.getElementById(`video${streamId}`);
+            const timeline = document.getElementById(`timeline${streamId}`);
+            
+            if (video.buffered.length === 0) return;
+            
+            const rect = timeline.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const timelineWidth = rect.width;
+            const percentage = clickX / timelineWidth;
+            
+            const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+            const seekTime = percentage * bufferedEnd;
+            
+            video.currentTime = Math.max(0, Math.min(seekTime, bufferedEnd));
+            updateStatus(streamId, `⏩ Seeking to ${Math.floor(seekTime / 60)}:${Math.floor(seekTime % 60).toString().padStart(2, '0')}`);
+        }
+
+        function goLive(streamId) {
+            const video = document.getElementById(`video${streamId}`);
+            const hls = players[streamId];
+            
+            if (hls && video.buffered.length > 0) {
+                const liveEdge = video.buffered.end(video.buffered.length - 1);
+                video.currentTime = liveEdge - 1; // Go to near live edge
+                updateStatus(streamId, '🔴 Switched to LIVE mode');
+            }
+        }
+
+        function stopStream(streamId) {
+            if (players[streamId]) {
+                players[streamId].destroy();
+                players[streamId] = null;
+            }
+            
+            const video = document.getElementById(`video${streamId}`);
+            video.src = '';
+            video.load();
+            
+            showOverlay(streamId);
+            updateStatus(streamId, `⏹️ Stream ${streamId} stopped`);
+            
+            // Reset timeline
+            document.getElementById(`progress${streamId}`).style.width = '0%';
+            document.getElementById(`time${streamId}`).textContent = '00:00';
+            
+            // Reset quality selector
+            document.getElementById(`quality${streamId}`).value = '-1';
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStatus(1, 'Ready to load Stream 1');
+            updateStatus(2, 'Ready to load Stream 2');
+        });
+    </script>
+</body>
+</html>

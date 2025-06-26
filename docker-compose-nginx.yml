@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  nginx-rtmp:
+    build: ./services/nginx-rtmp
+    ports:
+      - "1935:1935"   # RTMP
+      - "8080:8080"   # HTTP/HLS
+    volumes:
+      - /tmp/hls_shared:/tmp/hls_shared
+      - /tmp/recordings:/tmp/recordings
+      - /tmp/dash:/tmp/dash
+    environment:
+      - NGINX_WORKER_PROCESSES=auto
+    restart: unless-stopped

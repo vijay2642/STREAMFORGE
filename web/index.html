@@ -1165,12 +1165,12 @@
                 if (manualSeekTimeout) {
                     clearTimeout(manualSeekTimeout);
                 }
-                // Stay manual for 30 seconds or until user goes to live
-                manualSeekTimeout = setTimeout(() => { 
-                    isSeekingManually = false; 
-                    addDebugLog('Manual seeking timeout - returning to auto mode');
-                }, 30000); // Stay manual for 30 seconds
-                addDebugLog('Finished dragging timeline - staying manual for 30s');
+                // Stay manual until user manually clicks "GO LIVE" - no timeout
+                // manualSeekTimeout = setTimeout(() => {
+                //     isSeekingManually = false;
+                //     addDebugLog('Manual seeking timeout - returning to auto mode');
+                // }, 30000); // Stay manual for 30 seconds
+                addDebugLog('Finished dragging timeline - staying manual until GO LIVE clicked');
             });
             
             seekSlider.addEventListener('touchend', function() {
@@ -1179,12 +1179,12 @@
                 if (manualSeekTimeout) {
                     clearTimeout(manualSeekTimeout);
                 }
-                // Stay manual for 30 seconds or until user goes to live
-                manualSeekTimeout = setTimeout(() => { 
-                    isSeekingManually = false; 
-                    addDebugLog('Manual seeking timeout - returning to auto mode');
-                }, 30000); // Stay manual for 30 seconds
-                addDebugLog('Finished dragging timeline (touch) - staying manual for 30s');
+                // Stay manual until user manually clicks "GO LIVE" - no timeout
+                // manualSeekTimeout = setTimeout(() => {
+                //     isSeekingManually = false;
+                //     addDebugLog('Manual seeking timeout - returning to auto mode');
+                // }, 30000); // Stay manual for 30 seconds
+                addDebugLog('Finished dragging timeline (touch) - staying manual until GO LIVE clicked');
             });
 
             // Handle slider input for seeking (during drag)

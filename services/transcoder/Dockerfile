@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o transcoder main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o transcoder ./services/transcoder/main.go
 
 # Final stage
 FROM alpine:latest
