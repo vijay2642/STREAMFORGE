@@ -80,7 +80,7 @@ func Load(serviceName string) (*Config, error) {
 	viper.SetDefault("redis.db", 0)
 
 	viper.SetDefault("stream.rtmp_port", 1935)
-	viper.SetDefault("stream.hls_path", "/tmp/hls")
+	viper.SetDefault("stream.hls_path", "/tmp/hls_shared")
 	viper.SetDefault("stream.dash_path", "/tmp/dash")
 	viper.SetDefault("stream.segment_duration", 4)
 	viper.SetDefault("stream.max_bitrate", 2000)

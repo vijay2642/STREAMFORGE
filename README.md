@@ -1,110 +1,244 @@
-# StreamForge - Multi-Quality Live Streaming Platform
+# 🚀 StreamForge - High-Performance Live Streaming Platform
 
-🎬 **Professional live streaming platform with adaptive multi-quality transcoding and HLS delivery.**
+**Production-ready live streaming platform built with Go for maximum performance**
+
+[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](https://docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+## ✨ Features
+
+- **🚀 Pure Go Performance** - Zero Python overhead for maximum speed
+- **📺 Adaptive Bitrate** - Automatic 720p/480p/360p quality scaling  
+- **⚡ Low Latency** - 6-second target latency for live streaming
+- **🔄 Auto Transcoding** - Real-time FFmpeg transcoding with H.264 optimization
+- **📊 Real-time Monitoring** - Comprehensive admin dashboard and APIs
+- **🌐 HLS Streaming** - Industry-standard HTTP Live Streaming
+- **🎛️ Stream Management** - Start/stop/restart streams via API
+- **📈 Analytics** - Stream statistics, disk usage, system metrics
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   OBS Studio    │────│  NGINX-RTMP     │────│   Transcoder    │
+│   (RTMP Input)  │    │   (Port 1935)   │    │   (Go Service)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+┌─────────────────┐    ┌─────────────────┐              │
+│   Web Players   │────│   HLS Server    │──────────────┘
+│   (HLS Output)  │    │   (Go Service)  │
+└─────────────────┘    └─────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐
+│  Admin Panel    │────│   Admin API     │
+│  (Management)   │    │   (Go Service)  │
+└─────────────────┘    └─────────────────┘
+```
 
 ## 🚀 Quick Start
 
-### Start Multi-Quality Adaptive Streaming
+### Prerequisites
 ```bash
-# Start adaptive streaming for your OBS streams
-python3 bin/multi_quality_transcoder.py stream1 &
-python3 bin/multi_quality_transcoder.py stream3 &
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y docker.io docker-compose git golang-go ffmpeg curl
 
-# Start CORS server for HLS delivery
-python3 bin/cors_server.py &
-
-# Start web server for player interface
-cd web && python3 -m http.server 3000 --bind 0.0.0.0 &
+# CentOS/RHEL  
+sudo yum install -y docker docker-compose git golang ffmpeg curl
 ```
 
-### Access Your Streams
-- **Adaptive Player**: `http://YOUR_IP:3000/adaptive-live-player.html`
-- **Stream URLs**: `http://YOUR_IP:8085/stream1/master.m3u8`
+### 1. Clone & Setup
+```bash
+git clone <your-repo-url> /root/STREAMFORGE
+cd /root/STREAMFORGE
+chmod +x scripts/*.sh *.sh
+```
 
-## 📂 Project Structure
+### 2. Start All Services (One Command!)
+```bash
+./scripts/start-go-services.sh
+```
 
+### 3. Start NGINX-RTMP
+```bash
+docker-compose up -d nginx-rtmp
+```
+
+### 4. Verify Setup
+```bash
+./scripts/verify-setup.sh
+```
+
+**Expected Output:**
+```
+✅ 🎉 StreamForge is ready for streaming!
+```
+
+## 🎬 Start Streaming
+
+### OBS Studio Setup
+1. **Stream Settings:**
+   - **Server**: `rtmp://localhost:1935/live`
+   - **Stream Key**: `mystream` (any name you want)
+2. **Click "Start Streaming"**
+
+### Watch Your Stream
+- **Master Playlist**: `http://localhost:8085/hls/mystream/master.m3u8`
+- **VLC**: Open Network Stream → Use master playlist URL
+- **Web**: `http://localhost:8085/streams` (stream browser)
+
+## 📊 Management & Monitoring
+
+### Service Endpoints
+- **Transcoder API**: `http://localhost:8083`
+- **HLS File Server**: `http://localhost:8085`  
+- **Admin API**: `http://localhost:9000`
+- **NGINX Stats**: `http://localhost:8080/stat`
+
+### Health Checks
+```bash
+curl http://localhost:8083/health  # Transcoder
+curl http://localhost:8085/health  # HLS Server
+curl http://localhost:9000/health  # Admin API
+curl http://localhost:8080/health  # NGINX
+```
+
+### Admin APIs
+- **Active Streams**: `GET /api/admin/streams`
+- **Disk Usage**: `GET /api/admin/disk-usage`  
+- **System Stats**: `GET /api/admin/stats`
+- **File Management**: `GET /api/admin/files`
+- **Cleanup**: `POST /api/admin/cleanup`
+
+## 🔧 Configuration
+
+### Service Ports
+| Service | Port | Purpose |
+|---------|------|---------|
+| RTMP Input | 1935 | OBS/FFmpeg streaming |
+| NGINX HTTP | 8080 | Stats & control |
+| Transcoder API | 8083 | Stream management |
+| HLS Server | 8085 | File serving |
+| Admin API | 9000 | Administration |
+
+### Quality Profiles
+| Quality | Resolution | Video Bitrate | Audio Bitrate | H.264 Profile |
+|---------|------------|---------------|---------------|---------------|
+| 720p | 1280x720 | 2800k | 128k | Main 3.1 |
+| 480p | 854x480 | 1400k | 96k | Main 3.1 |
+| 360p | 640x360 | 800k | 64k | Baseline 3.0 |
+
+### HLS Settings
+- **Segment Duration**: 2 seconds
+- **Playlist Window**: 6 segments (12s buffer)
+- **Target Latency**: 6 seconds
+- **GOP Size**: 60 frames (perfect 2s alignment)
+
+## 🛠️ Development
+
+### Build Services
+```bash
+# Individual services
+cd services/transcoder && go build -o transcoder .
+cd services/hls-server && go build -o hls-server .
+cd services/admin-api && go build -o admin-api .
+
+# Or use the startup script (auto-builds)
+./scripts/start-go-services.sh
+```
+
+### Project Structure
 ```
 StreamForge/
-├── bin/                    # Executable transcoders and servers
-│   ├── multi_quality_transcoder.py  # Main adaptive transcoder
-│   ├── live_transcoder.py          # Simple HLS transcoder
-│   ├── buffer_fix_transcoder.py    # Optimized transcoder
-│   └── cors_server.py              # HLS content server
-├── web/                    # Web interface and players
-│   ├── adaptive-live-player.html   # Main adaptive player
-│   ├── test-player.html           # Simple test player
-│   └── index.html                 # Stream dashboard
-├── scripts/               # Utility scripts
-│   ├── health/           # Health checks and startup scripts
-│   └── deployment/       # Docker and cloud deployment
-├── config/               # Configuration files
-├── logs/                 # Application logs
-├── docs/                 # Documentation
-└── services/             # Service definitions
+├── services/
+│   ├── transcoder/          # Go transcoding service
+│   ├── hls-server/          # Go HLS file server
+│   ├── admin-api/           # Go admin API
+│   └── nginx-rtmp/          # NGINX-RTMP Docker config
+├── scripts/
+│   ├── start-go-services.sh # Main startup script
+│   └── verify-setup.sh      # Setup verification
+├── logs/                    # Service logs
+└── docker-compose.yml       # NGINX-RTMP container
 ```
 
-## 🎯 Features
+## 🔍 Troubleshooting
 
-- **Multi-Quality Adaptive Streaming**: 1080p, 720p, 480p, 360p
-- **HLS.js Player**: Automatic quality adaptation
-- **Live Transcoding**: Real-time RTMP to HLS conversion
-- **CORS Support**: Cross-origin streaming
-- **Health Monitoring**: System status checks
-- **Docker Support**: Container deployment ready
-
-## 🛠️ Health & Management
-
+### Services Won't Start
 ```bash
-# Check system health
-./scripts/health/health-check.sh
+# Kill old processes
+sudo pkill -f "transcoder|hls-server|admin-api|python"
 
-# Quick startup (auto-detects streams)
-./scripts/health/streamforge-quick-start.sh
+# Check ports
+sudo lsof -i :8083 -i :8085 -i :9000 -i :1935 -i :8080
 
-# Full platform startup
-./scripts/health/streamforge-health-startup.sh
-
-# Interactive debugging
-python3 scripts/health/smart_debug.py
+# Restart services  
+./scripts/start-go-services.sh
 ```
 
-## 📺 OBS Studio Setup
+### Check Logs
+```bash
+tail -f logs/transcoder.log
+tail -f logs/hls-server.log
+tail -f logs/admin-api.log
+docker logs streamforge-nginx-rtmp-1
+```
 
-**Stream Settings:**
-- **Server**: `rtmp://YOUR_IP:1935/live`
-- **Stream Key**: `stream1`, `stream2`, `stream3`, etc.
+### Verify Streaming
+```bash
+# Should show .ts and .m3u8 files when streaming
+ls -la /tmp/hls_shared/mystream/
+```
 
-**Recommended Settings:**
-- **Bitrate**: 3000-5000 kbps
-- **Keyframe Interval**: 2 seconds
-- **Profile**: High
-- **Encoder**: x264
+## ⚡ Performance Optimizations
 
-## 🌐 Architecture
+- **Pure Go Stack**: Eliminated Python bottlenecks
+- **Zero-copy CORS**: Optimized headers for HLS
+- **Smart Caching**: 5s for playlists, 2min for segments
+- **FFmpeg Tuning**: Zerolatency preset with GOP alignment
+- **HTTP/2 Ready**: Native support for modern protocols
+- **Memory Efficient**: Go's garbage collection vs Python GIL
 
-1. **RTMP Ingestion** → NGINX RTMP Server (port 1935)
-2. **Multi-Quality Transcoding** → FFmpeg with 4 quality levels
-3. **HLS Delivery** → CORS Server (port 8085)
-4. **Web Interface** → HTTP Server (port 3000)
-5. **Adaptive Playback** → HLS.js Player
+## 📝 API Examples
 
-## 📊 Quality Levels
+### Start Stream Transcoding
+```bash
+curl -X POST http://localhost:8083/api/streams/start/mystream
+```
 
-| Quality | Resolution | Bitrate | Use Case |
-|---------|------------|---------|----------|
-| 1080p   | 1920×1080  | 5 Mbps  | High-end streaming |
-| 720p    | 1280×720   | 3 Mbps  | Standard HD |
-| 480p    | 854×480    | 1.5 Mbps| Mobile/slow connections |
-| 360p    | 640×360    | 800k    | Ultra-low bandwidth |
+### Get Stream Status
+```bash
+curl http://localhost:8083/api/streams/status/mystream
+```
 
-## 🚀 Deployment
+### Check Disk Usage
+```bash
+curl http://localhost:9000/api/admin/disk-usage
+```
 
-See `docs/guides/` for detailed deployment guides:
-- Cloud deployment (Railway, DigitalOcean)
-- Docker containerization
-- Kubernetes orchestration
-- Load balancing and scaling
+### Get System Stats
+```bash
+curl http://localhost:9000/api/admin/stats
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [Gin](https://github.com/gin-gonic/gin) web framework
+- Powered by [FFmpeg](https://ffmpeg.org/) for transcoding
+- Uses [NGINX-RTMP](https://github.com/arut/nginx-rtmp-module) for RTMP ingestion
 
 ---
 
-**Built with ❤️ for professional live streaming** 
+**🚀 Ready to stream? Start with `./scripts/start-go-services.sh` and begin broadcasting!**

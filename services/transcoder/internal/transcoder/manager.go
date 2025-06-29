@@ -65,7 +65,7 @@ func (m *Manager) GetQualityProfiles() []Quality {
 	return m.qualities
 }
 
-// StartTranscoder starts FFmpeg transcoding for a stream key
+// StartTranscoder starts actual Go-based transcoding (replacing shell scripts)
 func (m *Manager) StartTranscoder(streamKey string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -77,7 +77,7 @@ func (m *Manager) StartTranscoder(streamKey string) error {
 		}
 	}
 
-	log.Printf("🎬 Starting transcoder for stream key: %s", streamKey)
+	log.Printf("🎬 Starting Go-based transcoding for stream: %s", streamKey)
 
 	// Create output directory structure
 	streamOutputDir := filepath.Join(m.outputDir, streamKey)
@@ -85,23 +85,22 @@ func (m *Manager) StartTranscoder(streamKey string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Create subdirectories for each quality (0-5)
-	for i := 0; i < len(m.qualities); i++ {
-		qualityDir := filepath.Join(streamOutputDir, fmt.Sprintf("%d", i))
-		if err := os.MkdirAll(qualityDir, 0755); err != nil {
-			return fmt.Errorf("failed to create quality directory %s: %w", qualityDir, err)
-		}
+	// Initialize HLS manager for this stream
+	hlsManager := NewHLSManager(m.outputDir)
+	
+	// Generate master playlist with proper CODECS
+	if err := hlsManager.GenerateMasterPlaylist(streamKey); err != nil {
+		return fmt.Errorf("failed to generate master playlist: %w", err)
 	}
 
-	// Build FFmpeg arguments
+	// Build FFmpeg command
 	inputURL := fmt.Sprintf("%s/%s", m.rtmpURL, streamKey)
-	args := m.buildFFmpegArgs(inputURL, streamOutputDir)
-
+	args := hlsManager.GenerateFFmpegCommand(streamKey, inputURL)
+	
 	// Start FFmpeg process
 	cmd := exec.Command("ffmpeg", args...)
-
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start ffmpeg: %w", err)
+		return fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
 	// Create process tracking
@@ -117,41 +116,34 @@ func (m *Manager) StartTranscoder(streamKey string) error {
 
 	m.processes[streamKey] = process
 
-	// Handle process monitoring in goroutine
-	go m.monitorProcess(streamKey, cmd)
+	// Start monitoring in background
+	go m.monitorProcess(streamKey, hlsManager)
 
-	log.Printf("✅ Transcoder started for %s (PID: %d)", streamKey, cmd.Process.Pid)
+	log.Printf("✅ Go-based transcoding started for %s (PID: %d)", streamKey, cmd.Process.Pid)
 	return nil
 }
 
-// StopTranscoder stops the transcoding process for a stream key
+// StopTranscoder stops monitoring for a stream key
 func (m *Manager) StopTranscoder(streamKey string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	process, exists := m.processes[streamKey]
 	if !exists {
-		return fmt.Errorf("no transcoder found for stream key: %s", streamKey)
+		return fmt.Errorf("no stream monitoring found for stream key: %s", streamKey)
 	}
 
-	if process.Status != "running" {
-		return fmt.Errorf("transcoder for %s is not running", streamKey)
+	if process.Status != "monitoring" && process.Status != "running" {
+		return fmt.Errorf("stream monitoring for %s is not active", streamKey)
 	}
 
-	log.Printf("🛑 Stopping transcoder for stream key: %s", streamKey)
-
-	// Send SIGINT to FFmpeg for graceful shutdown
-	if err := process.Cmd.Process.Signal(os.Interrupt); err != nil {
-		// If SIGINT fails, force kill
-		if killErr := process.Cmd.Process.Kill(); killErr != nil {
-			log.Printf("Failed to kill process for %s: %v", streamKey, killErr)
-		}
-	}
+	log.Printf("🛑 Stopping stream monitoring for: %s", streamKey)
+	log.Printf("ℹ️  Note: NGINX-managed transcoding process will continue until stream ends")
 
 	process.Status = "stopped"
 	delete(m.processes, streamKey)
 
-	log.Printf("✅ Transcoder stopped for %s", streamKey)
+	log.Printf("✅ Stream monitoring stopped for %s", streamKey)
 	return nil
 }
 
@@ -164,49 +156,80 @@ func (m *Manager) GetStatus(streamKey string) (*TranscoderProcess, bool) {
 	return process, exists
 }
 
-// GetActiveTranscoders returns all active transcoding processes
+// GetActiveTranscoders returns all active monitoring processes
 func (m *Manager) GetActiveTranscoders() map[string]*TranscoderProcess {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
 	active := make(map[string]*TranscoderProcess)
 	for key, process := range m.processes {
-		if process.Status == "running" {
+		if process.Status == "monitoring" || process.Status == "running" {
 			active[key] = process
 		}
 	}
 	return active
 }
 
-// StopAll stops all active transcoders
+// StopAll stops all active monitoring
 func (m *Manager) StopAll() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	log.Printf("🛑 Stopping all active transcoders")
+	log.Printf("🛑 Stopping all stream monitoring")
 	for streamKey, process := range m.processes {
-		if process.Status == "running" {
-			log.Printf("Stopping transcoder for %s", streamKey)
-			if err := process.Cmd.Process.Signal(os.Interrupt); err != nil {
-				process.Cmd.Process.Kill()
-			}
+		if process.Status == "monitoring" || process.Status == "running" {
+			log.Printf("Stopping monitoring for %s", streamKey)
+			process.Status = "stopped"
 		}
 	}
 	m.processes = make(map[string]*TranscoderProcess)
+	log.Printf("ℹ️  Note: NGINX-managed transcoding processes will continue until streams end")
 }
 
-// buildFFmpegArgs builds simple relay to nginx-rtmp
-func (m *Manager) buildFFmpegArgs(inputURL, outputDir string) []string {
-	// Simple relay to nginx-rtmp for HLS generation
-	args := []string{
-		"-y", // overwrite output files
-		"-i", inputURL,
-		"-c", "copy", // Copy streams without re-encoding
-		"-f", "flv", // Output FLV for RTMP
-		"rtmp://localhost:1935/live/" + filepath.Base(outputDir), // Send to nginx-rtmp
+// monitorProcess monitors Go-managed FFmpeg process and HLS health
+func (m *Manager) monitorProcess(streamKey string, hlsManager *HLSManager) {
+	log.Printf("📊 Starting Go process monitoring for %s", streamKey)
+
+	for {
+		m.mutex.RLock()
+		process, exists := m.processes[streamKey]
+		m.mutex.RUnlock()
+
+		if !exists || process.Status == "stopped" {
+			break
+		}
+
+		// Check if FFmpeg process is still running
+		if process.Cmd != nil && process.Cmd.Process != nil {
+			if proc, err := os.FindProcess(process.Cmd.Process.Pid); err != nil || proc == nil {
+				m.mutex.Lock()
+				if p, exists := m.processes[streamKey]; exists {
+					p.Status = "failed"
+					log.Printf("❌ FFmpeg process for %s has died", streamKey)
+				}
+				m.mutex.Unlock()
+				break
+			}
+		}
+
+		// Check HLS health using Go HLS manager
+		if stats, err := hlsManager.MonitorHLSHealth(streamKey); err == nil {
+			m.mutex.Lock()
+			if process, exists := m.processes[streamKey]; exists {
+				if stats.Active {
+					process.Status = "running"
+				} else {
+					process.Status = "stale"
+					log.Printf("⚠️  HLS output for %s appears stale", streamKey)
+				}
+			}
+			m.mutex.Unlock()
+		}
+
+		time.Sleep(10 * time.Second)
 	}
 
-	return args
+	log.Printf("📊 Go process monitoring stopped for %s", streamKey)
 }
 
 // getProfile returns the H.264 profile for a quality level
@@ -235,26 +258,4 @@ func (m *Manager) getAudioBitrate(index int) string {
 		return "128k"
 	}
 	return "96k" // Lower quality levels
-}
-
-// monitorProcess monitors an FFmpeg process and handles its lifecycle
-func (m *Manager) monitorProcess(streamKey string, cmd *exec.Cmd) {
-	// Wait for process completion
-	err := cmd.Wait()
-
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if process, exists := m.processes[streamKey]; exists {
-		if err != nil {
-			log.Printf("❌ FFmpeg process for %s exited with error: %v", streamKey, err)
-			process.Status = "error"
-		} else {
-			log.Printf("✅ FFmpeg process for %s completed successfully", streamKey)
-			process.Status = "completed"
-		}
-
-		// Clean up
-		delete(m.processes, streamKey)
-	}
 }

@@ -68,7 +68,7 @@ func HLSFileHandler(outputDir string) gin.HandlerFunc {
 func main() {
 	port := flag.String("port", "8083", "HTTP server port")
 	rtmpURL := flag.String("rtmp-url", "rtmp://localhost:1935/live", "RTMP server URL")
-	outputDir := flag.String("output-dir", "./output/hls", "HLS output directory")
+	outputDir := flag.String("output-dir", "/tmp/hls_shared", "HLS output directory")
 	flag.Parse()
 
 	// Override with environment variables if set
@@ -118,6 +118,11 @@ func main() {
 	router.POST("/transcode/stop/:streamKey", handler.StopTranscoder)
 	router.GET("/transcode/status/:streamKey", handler.GetTranscoderStatus)
 	router.GET("/transcode/active", handler.GetActiveTranscoders)
+
+	// NGINX callback endpoints (called by NGINX on_publish/on_publish_done)
+	router.POST("/api/streams/start/:streamKey", handler.StartTranscoder)
+	router.POST("/api/streams/stop/:streamKey", handler.StopTranscoder)
+	router.GET("/api/streams/status/:streamKey", handler.GetTranscoderStatus)
 
 	// HLS file serving with CORS support
 	router.GET("/hls/*filepath", HLSFileHandler(*outputDir))

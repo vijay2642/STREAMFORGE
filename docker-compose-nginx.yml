@@ -13,3 +13,11 @@ services:
     environment:
       - NGINX_WORKER_PROCESSES=auto
     restart: unless-stopped
+
+  web-player:
+    image: nginx:alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "3000:80"
+    restart: unless-stopped

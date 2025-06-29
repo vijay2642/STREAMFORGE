@@ -1,4 +1,22 @@
 {
+  "name": "streamforge",
+  "version": "1.0.0",
+  "description": "🎬 **Professional live streaming platform with adaptive multi-quality transcoding and HLS delivery.**",
+  "main": "test-player.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vijay2642/STREAMFORGE.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vijay2642/STREAMFORGE/issues"
+  },
+  "homepage": "https://github.com/vijay2642/STREAMFORGE#readme",
   "dependencies": {
     "playwright": "^1.53.1"
   }
