@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamForge - Test Streams</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .stream-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background-color: #2a2a2a;
+        }
+        .stream-title {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+        video {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            background-color: #000;
+            border-radius: 4px;
+        }
+        .stream-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .status.live {
+            background-color: #f44336;
+            color: white;
+        }
+        .status.offline {
+            background-color: #666;
+            color: white;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 StreamForge Live Streams Test</h1>
+        <p>Testing all active streams with HLS.js player</p>
+
+        <!-- Stream 1 -->
+        <div class="stream-section">
+            <h2 class="stream-title">📺 Stream 1 (1080p)</h2>
+            <video id="video1" controls muted autoplay></video>
+            <div class="stream-info">
+                <strong>URL:</strong> http://localhost:8080/hls/stream1/index.m3u8<br>
+                <strong>Resolution:</strong> 1920x1080 @ 30fps<br>
+                <strong>Codec:</strong> H.264 Main Profile
+            </div>
+            <div id="status1" class="status offline">Connecting...</div>
+        </div>
+
+        <!-- Stream 2 -->
+        <div class="stream-section">
+            <h2 class="stream-title">📺 Stream 2 (1080p)</h2>
+            <video id="video2" controls muted autoplay></video>
+            <div class="stream-info">
+                <strong>URL:</strong> http://localhost:8080/hls/stream2/index.m3u8<br>
+                <strong>Resolution:</strong> 1920x1080 @ 30fps<br>
+                <strong>Codec:</strong> H.264 Main Profile
+            </div>
+            <div id="status2" class="status offline">Connecting...</div>
+        </div>
+
+        <!-- Stream 3 -->
+        <div class="stream-section">
+            <h2 class="stream-title">📺 Stream 3 (720p)</h2>
+            <video id="video3" controls muted autoplay></video>
+            <div class="stream-info">
+                <strong>URL:</strong> http://localhost:8080/hls/stream3/index.m3u8<br>
+                <strong>Resolution:</strong> 1280x720 @ 30fps<br>
+                <strong>Codec:</strong> H.264 Main Profile
+            </div>
+            <div id="status3" class="status offline">Connecting...</div>
+        </div>
+    </div>
+
+    <script>
+        function setupStream(videoId, streamUrl, statusId) {
+            const video = document.getElementById(videoId);
+            const status = document.getElementById(statusId);
+            
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90
+                });
+                
+                hls.loadSource(streamUrl);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log(`${videoId}: Manifest parsed, starting playback`);
+                    status.textContent = 'LIVE';
+                    status.className = 'status live';
+                    video.play().catch(e => console.log(`${videoId}: Autoplay prevented:`, e));
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error(`${videoId}: HLS Error:`, data);
+                    status.textContent = 'ERROR';
+                    status.className = 'status offline';
+                });
+                
+                video.addEventListener('loadstart', () => {
+                    console.log(`${videoId}: Load started`);
+                });
+                
+                video.addEventListener('canplay', () => {
+                    console.log(`${videoId}: Can play`);
+                });
+                
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                video.src = streamUrl;
+                video.addEventListener('loadedmetadata', function() {
+                    status.textContent = 'LIVE';
+                    status.className = 'status live';
+                });
+                video.addEventListener('error', function() {
+                    status.textContent = 'ERROR';
+                    status.className = 'status offline';
+                });
+            } else {
+                status.textContent = 'HLS NOT SUPPORTED';
+                status.className = 'status offline';
+            }
+        }
+
+        // Setup all streams
+        setupStream('video1', 'http://localhost:8080/hls/stream1/index.m3u8', 'status1');
+        setupStream('video2', 'http://localhost:8080/hls/stream2/index.m3u8', 'status2');
+        setupStream('video3', 'http://localhost:8080/hls/stream3/index.m3u8', 'status3');
+    </script>
+</body>
+</html>

@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/xml"
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +18,131 @@ import (
 	"github.com/streamforge/platform/services/transcoder/internal/handlers"
 	"github.com/streamforge/platform/services/transcoder/internal/transcoder"
 )
+
+// NGINX stats structures for automatic stream detection
+type NginxStats struct {
+	XMLName xml.Name `xml:"rtmp"`
+	Server  struct {
+		Application struct {
+			Live struct {
+				Streams []NginxStream `xml:"stream"`
+			} `xml:"live"`
+		} `xml:"application"`
+	} `xml:"server"`
+}
+
+type NginxStream struct {
+	Name       string    `xml:"name"`
+	Publishing *struct{} `xml:"publishing"`
+	Active     *struct{} `xml:"active"`
+}
+
+// AutoStreamDetector handles automatic stream detection and transcoder startup
+type AutoStreamDetector struct {
+	transcoderManager *transcoder.Manager
+	nginxStatsURL     string
+	activeStreams     map[string]bool
+	stopChan          chan bool
+}
+
+func NewAutoStreamDetector(manager *transcoder.Manager, nginxStatsURL string) *AutoStreamDetector {
+	return &AutoStreamDetector{
+		transcoderManager: manager,
+		nginxStatsURL:     nginxStatsURL,
+		activeStreams:     make(map[string]bool),
+		stopChan:          make(chan bool),
+	}
+}
+
+func (asd *AutoStreamDetector) Start() {
+	log.Printf("🔍 Starting automatic stream detection...")
+	go asd.monitorLoop()
+}
+
+func (asd *AutoStreamDetector) Stop() {
+	log.Printf("🛑 Stopping automatic stream detection...")
+	asd.stopChan <- true
+}
+
+func (asd *AutoStreamDetector) monitorLoop() {
+	ticker := time.NewTicker(3 * time.Second) // Check every 3 seconds for faster detection
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			asd.checkStreams()
+		case <-asd.stopChan:
+			return
+		}
+	}
+}
+
+func (asd *AutoStreamDetector) checkStreams() {
+	currentStreams := asd.fetchActiveStreams()
+
+	// Start transcoders for new streams
+	for _, streamName := range currentStreams {
+		if !asd.activeStreams[streamName] {
+			log.Printf("🎬 Auto-detected new stream: %s", streamName)
+			go func(stream string) {
+				if err := asd.transcoderManager.StartTranscoder(stream); err != nil {
+					log.Printf("❌ Failed to auto-start transcoder for %s: %v", stream, err)
+				} else {
+					log.Printf("✅ Auto-started transcoder for %s", stream)
+				}
+			}(streamName)
+			asd.activeStreams[streamName] = true
+		}
+	}
+
+	// Mark streams as inactive if they're no longer publishing
+	currentStreamSet := make(map[string]bool)
+	for _, stream := range currentStreams {
+		currentStreamSet[stream] = true
+	}
+
+	for streamName := range asd.activeStreams {
+		if !currentStreamSet[streamName] {
+			log.Printf("🛑 Stream %s no longer active", streamName)
+			delete(asd.activeStreams, streamName)
+		}
+	}
+}
+
+func (asd *AutoStreamDetector) fetchActiveStreams() []string {
+	resp, err := http.Get(asd.nginxStatsURL)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch NGINX stats: %v", err)
+		return []string{}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("⚠️ Failed to read NGINX stats response: %v", err)
+		return []string{}
+	}
+
+	var stats NginxStats
+	if err := xml.Unmarshal(body, &stats); err != nil {
+		log.Printf("⚠️ Failed to parse NGINX stats XML: %v", err)
+		return []string{}
+	}
+
+	var activeStreams []string
+	for _, stream := range stats.Server.Application.Live.Streams {
+		if stream.Publishing != nil && stream.Active != nil && stream.Name != "" {
+			activeStreams = append(activeStreams, stream.Name)
+		}
+	}
+
+	if len(activeStreams) > 0 {
+		log.Printf("📊 Found %d active streams: %s", len(activeStreams), strings.Join(activeStreams, ", "))
+	}
+
+	return activeStreams
+}
 
 // CORS middleware
 func CORSMiddleware() gin.HandlerFunc {
@@ -90,6 +218,11 @@ func main() {
 	// Initialize transcoder manager
 	transcoderManager := transcoder.NewManager(*rtmpURL, *outputDir)
 
+	// Initialize automatic stream detection
+	nginxStatsURL := "http://localhost:8080/stat"
+	autoDetector := NewAutoStreamDetector(transcoderManager, nginxStatsURL)
+	autoDetector.Start()
+
 	// Initialize handlers
 	handler := handlers.NewHandler(transcoderManager)
 
@@ -140,6 +273,9 @@ func main() {
 		<-sigChan
 
 		log.Printf("Shutting down transcoder service...")
+
+		// Stop automatic stream detection
+		autoDetector.Stop()
 
 		// Stop all active transcoders
 		transcoderManager.StopAll()
