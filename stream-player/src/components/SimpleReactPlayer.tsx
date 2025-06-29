@@ -11,11 +11,9 @@ interface StreamInfo {
 
 interface StreamsResponse {
   status: string;
-  data: {
-    active_streams: number;
-    hls_streams: StreamInfo[];
-    timestamp: string;
-  };
+  count: number;
+  streams: StreamInfo[];
+  timestamp: string;
 }
 
 const SimpleReactPlayer: React.FC = () => {
@@ -30,8 +28,7 @@ const SimpleReactPlayer: React.FC = () => {
   
   // Configure HLS server connection
   const host = process.env.REACT_APP_HLS_HOST || window.location.hostname;
-  const port = process.env.REACT_APP_HLS_PORT || '8085';
-  const adminPort = process.env.REACT_APP_ADMIN_PORT || '9000';
+  const port = process.env.REACT_APP_HLS_PORT || '8083';
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -41,15 +38,15 @@ const SimpleReactPlayer: React.FC = () => {
   const fetchAvailableStreams = async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch(`http://${host}:${adminPort}/api/admin/streams`);
+      const response = await fetch(`http://${host}:${port}/streams`);
       const data: StreamsResponse = await response.json();
       
       if (data.status === 'success') {
-        setAvailableStreams(data.data.hls_streams);
-        addLog(`🔄 Found ${data.data.hls_streams.length} configured streams`);
+        setAvailableStreams(data.streams);
+        addLog(`🔄 Found ${data.streams.length} configured streams`);
         
         // Count active streams
-        const activeCount = data.data.hls_streams.filter(s => s.status === 'active').length;
+        const activeCount = data.streams.filter(s => s.status === 'active').length;
         if (activeCount > 0) {
           addLog(`✅ ${activeCount} streams are currently active`);
         } else {
@@ -58,13 +55,14 @@ const SimpleReactPlayer: React.FC = () => {
       }
     } catch (error) {
       addLog(`❌ Failed to fetch streams: ${error}`);
-      // Fallback to default streams if API fails
+      // Fallback to default streams if API fails - include stream3
       const fallbackStreams: StreamInfo[] = [
         { name: 'stream1', status: 'inactive', file_count: 0, last_update: '' },
-        { name: 'stream2', status: 'inactive', file_count: 0, last_update: '' }
+        { name: 'stream2', status: 'inactive', file_count: 0, last_update: '' },
+        { name: 'stream3', status: 'inactive', file_count: 0, last_update: '' }
       ];
       setAvailableStreams(fallbackStreams);
-      addLog(`🔧 Using fallback streams: stream1, stream2`);
+      addLog(`🔧 Using fallback streams: stream1, stream2, stream3`);
     } finally {
       setIsRefreshing(false);
     }
@@ -253,7 +251,7 @@ const SimpleReactPlayer: React.FC = () => {
             onChange={(e) => setStreamKey(e.target.value)}
             className="stream-input"
             style={{ maxWidth: '300px', padding: '12px', fontSize: '16px' }}
-            disabled={isRefreshing}
+            disabled={false}
           >
             {availableStreams.length > 0 ? (
               availableStreams.map((stream) => (
@@ -377,49 +375,37 @@ const SimpleReactPlayer: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ 
-        marginTop: '20px', 
-        padding: '20px', 
-        background: '#1a1a1a', 
-        borderRadius: '12px',
-        border: '1px solid #333'
-      }}>
-        <h3 style={{ color: '#61dafb', marginBottom: '15px' }}>
-          🎯 Your Live Streaming Setup
-        </h3>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-          gap: '15px',
-          fontSize: '14px',
-          lineHeight: '1.6'
-        }}>
-          <div>
-            <h4 style={{ color: '#4caf50', marginBottom: '8px' }}>📡 RTMP Publishing</h4>
-            <p style={{ fontFamily: 'monospace', background: '#2a2a2a', padding: '8px', borderRadius: '4px' }}>
-              rtmp://localhost:1935/live/stream1<br/>
-              rtmp://localhost:1935/live/stream2
-            </p>
+      <div className="setup-section">
+        <h3>🎯 Your Live Streaming Setup</h3>
+        <div className="setup-grid">
+          <div className="setup-card rtmp">
+            <h4>📡 RTMP Publishing</h4>
+            <div className="setup-code">
+              rtmp://{host === 'localhost' ? '188.245.163.8' : host}:1935/live/stream1<br/>
+              rtmp://{host === 'localhost' ? '188.245.163.8' : host}:1935/live/stream2<br/>
+              rtmp://{host === 'localhost' ? '188.245.163.8' : host}:1935/live/stream3
+            </div>
           </div>
-          <div>
-            <h4 style={{ color: '#ff9800', marginBottom: '8px' }}>🎬 HLS Playback</h4>
-            <p style={{ fontFamily: 'monospace', background: '#2a2a2a', padding: '8px', borderRadius: '4px' }}>
+          <div className="setup-card hls">
+            <h4>🎬 HLS Playback</h4>
+            <div className="setup-code">
               http://{host}:{port}/hls/stream1/master.m3u8<br/>
-              http://{host}:{port}/hls/stream2/master.m3u8
-            </p>
+              http://{host}:{port}/hls/stream2/master.m3u8<br/>
+              http://{host}:{port}/hls/stream3/master.m3u8
+            </div>
           </div>
-          <div>
-            <h4 style={{ color: '#2196f3', marginBottom: '8px' }}>⚛️ React Features</h4>
-            <ul style={{ paddingLeft: '20px' }}>
+          <div className="setup-card features">
+            <h4>⚛️ React Features</h4>
+            <ul className="setup-list">
               <li>Live stream selection</li>
               <li>Real-time event logging</li>
               <li>Professional UI/UX</li>
               <li>Error handling</li>
             </ul>
           </div>
-          <div>
-            <h4 style={{ color: '#9c27b0', marginBottom: '8px' }}>🔧 Usage</h4>
-            <ul style={{ paddingLeft: '20px' }}>
+          <div className="setup-card usage">
+            <h4>🔧 Usage</h4>
+            <ul className="setup-list">
               <li>Select your stream from dropdown</li>
               <li>Click "Load Stream"</li>
               <li>Watch logs for feedback</li>

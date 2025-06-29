@@ -10,6 +10,11 @@ RUN apt-get update && apt-get install -y \
 # Copy the enhanced configuration that includes exec directive
 COPY nginx-enhanced.conf /etc/nginx/nginx.conf
 
+# Copy the stream lifecycle scripts
+COPY on_publish.sh /usr/local/bin/on_publish.sh
+COPY on_publish_done.sh /usr/local/bin/on_publish_done.sh
+RUN chmod +x /usr/local/bin/on_publish*.sh
+
 # Create necessary directories with proper permissions
 RUN mkdir -p /tmp/hls_shared /tmp/hls /root/STREAMFORGE/logs /var/log/streamforge \
     && chmod 755 /tmp/hls_shared /tmp/hls \

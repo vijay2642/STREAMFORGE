@@ -20,4 +20,14 @@ module.exports = function(app) {
       logLevel: 'debug'
     })
   );
+  
+  // Proxy admin API requests to the Go admin service
+  app.use(
+    '/api/admin',
+    createProxyMiddleware({
+      target: 'http://localhost:9000',
+      changeOrigin: true,
+      logLevel: 'debug'
+    })
+  );
 };

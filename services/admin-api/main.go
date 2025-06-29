@@ -237,6 +237,21 @@ func (api *AdminAPI) GetStreams(c *gin.Context) {
 									lastMod = info.ModTime()
 								}
 							}
+						} else if file.IsDir() {
+							// Check subdirectories (720p, 480p, 360p)
+							subPath := filepath.Join(streamPath, file.Name())
+							if subFiles, err := os.ReadDir(subPath); err == nil {
+								for _, subFile := range subFiles {
+									if strings.HasSuffix(subFile.Name(), ".ts") {
+										tsFiles++
+										if info, err := subFile.Info(); err == nil {
+											if info.ModTime().After(lastMod) {
+												lastMod = info.ModTime()
+											}
+										}
+									}
+								}
+							}
 						}
 					}
 
