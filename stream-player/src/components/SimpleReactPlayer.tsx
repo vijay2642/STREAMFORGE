@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Hls from 'hls.js';
 import './StreamPlayer.css';
 
@@ -7,6 +7,7 @@ interface StreamInfo {
   status: string;
   file_count: number;
   last_update: string;
+  isNew?: boolean; // Flag for newly discovered streams
 }
 
 interface StreamsResponse {
@@ -16,6 +17,24 @@ interface StreamsResponse {
   timestamp: string;
 }
 
+interface ActiveTranscoderInfo {
+  stream_key: string;
+  status: string;
+  start_time: string;
+  uptime: string;
+  uptime_seconds: number;
+  output_dir: string;
+  pid: number;
+  hls_master: string;
+  quality_count: number;
+}
+
+interface ActiveTranscodersResponse {
+  success: boolean;
+  data: ActiveTranscoderInfo[];
+  count: number;
+}
+
 const SimpleReactPlayer: React.FC = () => {
   const [streamKey, setStreamKey] = useState('stream1');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,8 +42,17 @@ const SimpleReactPlayer: React.FC = () => {
   const [availableStreams, setAvailableStreams] = useState<StreamInfo[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLiveEdge, setIsLiveEdge] = useState(true);
+
+  // Smart auto-refresh state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isUserInteracting, setIsUserInteracting] = useState(false);
+  const [lastAutoRefresh, setLastAutoRefresh] = useState<Date>(new Date());
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const dropdownRef = useRef<HTMLSelectElement>(null);
+  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Configure HLS server connection
   const host = process.env.REACT_APP_HLS_HOST || window.location.hostname;
@@ -35,27 +63,148 @@ const SimpleReactPlayer: React.FC = () => {
     setLogs(prev => [...prev.slice(-9), `${timestamp} - ${message}`]);
   };
 
+  // Fetch active transcoders from the API
+  const fetchActiveTranscoders = useCallback(async (): Promise<ActiveTranscoderInfo[]> => {
+    try {
+      const response = await fetch(`http://${host}:${port}/transcode/active`);
+      const data: ActiveTranscodersResponse = await response.json();
+
+      if (data.success) {
+        return data.data;
+      }
+      return [];
+    } catch (error) {
+      console.warn('Failed to fetch active transcoders:', error);
+      return [];
+    }
+  }, [host, port]);
+
+  // Smart merge function that preserves user selection and adds new streams
+  const smartMergeStreams = useCallback((currentStreams: StreamInfo[], activeTranscoders: ActiveTranscoderInfo[]): StreamInfo[] => {
+    const existingStreamKeys = new Set(currentStreams.map(s => s.name));
+    const activeStreamKeys = new Set(activeTranscoders.map(t => t.stream_key));
+
+    // Update existing streams with current status
+    const updatedStreams = currentStreams.map(stream => ({
+      ...stream,
+      status: activeStreamKeys.has(stream.name) ? 'active' : 'inactive',
+      isNew: false // Clear new flag for existing streams
+    }));
+
+    // Add newly discovered streams
+    const newStreams: StreamInfo[] = activeTranscoders
+      .filter(transcoder => !existingStreamKeys.has(transcoder.stream_key))
+      .map(transcoder => ({
+        name: transcoder.stream_key,
+        status: 'active',
+        file_count: transcoder.quality_count,
+        last_update: transcoder.start_time,
+        isNew: true // Mark as new for visual indication
+      }));
+
+    return [...updatedStreams, ...newStreams];
+  }, []);
+
+  // Check if it's safe to update (user not actively interacting)
+  const isSafeToUpdate = useCallback((): boolean => {
+    return !isDropdownOpen && !isUserInteracting && autoRefreshEnabled;
+  }, [isDropdownOpen, isUserInteracting, autoRefreshEnabled]);
+
+  // Background auto-refresh function
+  const performBackgroundRefresh = useCallback(async () => {
+    if (!isSafeToUpdate()) {
+      return; // Skip if user is interacting
+    }
+
+    try {
+      const activeTranscoders = await fetchActiveTranscoders();
+
+      setAvailableStreams(currentStreams => {
+        const newStreams = smartMergeStreams(currentStreams, activeTranscoders);
+
+        // Check if there are actually new streams
+        const hasNewStreams = newStreams.some(s => s.isNew);
+        const activeCount = newStreams.filter(s => s.status === 'active').length;
+
+        if (hasNewStreams) {
+          const newStreamNames = newStreams.filter(s => s.isNew).map(s => s.name);
+          addLog(`🆕 New streams discovered: ${newStreamNames.join(', ')}`);
+        }
+
+        // Update last refresh time
+        setLastAutoRefresh(new Date());
+
+        return newStreams;
+      });
+
+    } catch (error) {
+      console.warn('Background refresh failed:', error);
+    }
+  }, [isSafeToUpdate, fetchActiveTranscoders, smartMergeStreams, addLog]);
+
+  // Setup auto-refresh interval
+  useEffect(() => {
+    if (autoRefreshEnabled) {
+      // Initial refresh after 2 seconds
+      const initialTimeout = setTimeout(performBackgroundRefresh, 2000);
+
+      // Then refresh every 8 seconds
+      autoRefreshIntervalRef.current = setInterval(performBackgroundRefresh, 8000);
+
+      return () => {
+        clearTimeout(initialTimeout);
+        if (autoRefreshIntervalRef.current) {
+          clearInterval(autoRefreshIntervalRef.current);
+        }
+      };
+    }
+  }, [autoRefreshEnabled, performBackgroundRefresh]);
+
   const fetchAvailableStreams = async () => {
     setIsRefreshing(true);
+    setIsUserInteracting(true); // Prevent auto-refresh during manual refresh
+
     try {
-      const response = await fetch(`http://${host}:${port}/streams`);
-      const data: StreamsResponse = await response.json();
-      
-      if (data.status === 'success') {
-        setAvailableStreams(data.streams);
-        addLog(`🔄 Found ${data.streams.length} configured streams`);
-        
-        // Count active streams
-        const activeCount = data.streams.filter(s => s.status === 'active').length;
-        if (activeCount > 0) {
-          addLog(`✅ ${activeCount} streams are currently active`);
-        } else {
-          addLog(`⏳ No active streams - ready for RTMP input`);
+      // Try to get active transcoders first
+      const activeTranscoders = await fetchActiveTranscoders();
+
+      // Also try the legacy streams endpoint as fallback
+      let legacyStreams: StreamInfo[] = [];
+      try {
+        const response = await fetch(`http://${host}:${port}/streams`);
+        const data: StreamsResponse = await response.json();
+        if (data.status === 'success') {
+          legacyStreams = data.streams;
         }
+      } catch (legacyError) {
+        console.warn('Legacy streams endpoint failed:', legacyError);
       }
+
+      // Merge active transcoders with legacy streams or use fallback
+      const baseStreams = legacyStreams.length > 0 ? legacyStreams : [
+        { name: 'stream1', status: 'inactive', file_count: 0, last_update: '' },
+        { name: 'stream2', status: 'inactive', file_count: 0, last_update: '' },
+        { name: 'stream3', status: 'inactive', file_count: 0, last_update: '' }
+      ];
+
+      const mergedStreams = smartMergeStreams(baseStreams, activeTranscoders);
+      setAvailableStreams(mergedStreams);
+
+      const activeCount = mergedStreams.filter(s => s.status === 'active').length;
+      const totalCount = mergedStreams.length;
+
+      addLog(`🔄 Found ${totalCount} streams (${activeCount} active)`);
+
+      if (activeCount > 0) {
+        const activeNames = mergedStreams.filter(s => s.status === 'active').map(s => s.name);
+        addLog(`✅ Active: ${activeNames.join(', ')}`);
+      } else {
+        addLog(`⏳ No active streams - ready for RTMP input`);
+      }
+
     } catch (error) {
       addLog(`❌ Failed to fetch streams: ${error}`);
-      // Fallback to default streams if API fails - include stream3
+      // Ultimate fallback
       const fallbackStreams: StreamInfo[] = [
         { name: 'stream1', status: 'inactive', file_count: 0, last_update: '' },
         { name: 'stream2', status: 'inactive', file_count: 0, last_update: '' },
@@ -65,6 +214,8 @@ const SimpleReactPlayer: React.FC = () => {
       addLog(`🔧 Using fallback streams: stream1, stream2, stream3`);
     } finally {
       setIsRefreshing(false);
+      // Allow auto-refresh again after a short delay
+      setTimeout(() => setIsUserInteracting(false), 1000);
     }
   };
 
@@ -242,13 +393,74 @@ const SimpleReactPlayer: React.FC = () => {
       <div className="player-header">
         <h1>⚛️ React Live Stream Player</h1>
         <p>Available Streams: {availableStreams.length} configured | {availableStreams.filter(s => s.status === 'active').length} active</p>
+
+        {/* Auto-refresh status and controls */}
+        <div className="auto-refresh-panel" style={{
+          fontSize: '14px',
+          color: '#666',
+          marginTop: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>🔄 Auto-refresh:</span>
+            <button
+              onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+              style={{
+                padding: '4px 8px',
+                fontSize: '12px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                background: autoRefreshEnabled ? '#e8f5e8' : '#f5f5f5',
+                color: autoRefreshEnabled ? '#2d5a2d' : '#666',
+                cursor: 'pointer'
+              }}
+            >
+              {autoRefreshEnabled ? '✅ ON' : '❌ OFF'}
+            </button>
+          </div>
+
+          <div style={{ fontSize: '12px', color: '#888' }}>
+            Last update: {lastAutoRefresh.toLocaleTimeString()}
+          </div>
+
+          {isUserInteracting && (
+            <div style={{ fontSize: '12px', color: '#ff6b35' }}>
+              ⏸️ Paused (user interacting)
+            </div>
+          )}
+
+          {availableStreams.some(s => s.isNew) && (
+            <div style={{ fontSize: '12px', color: '#4CAF50', fontWeight: 'bold' }}>
+              🆕 New streams detected!
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="player-controls">
         <div className="control-group">
           <select
+            ref={dropdownRef}
             value={streamKey}
-            onChange={(e) => setStreamKey(e.target.value)}
+            onChange={(e) => {
+              setStreamKey(e.target.value);
+              // Clear new flag when user selects a stream
+              setAvailableStreams(prev => prev.map(s => ({ ...s, isNew: false })));
+            }}
+            onFocus={() => {
+              setIsDropdownOpen(true);
+              setIsUserInteracting(true);
+            }}
+            onBlur={() => {
+              setIsDropdownOpen(false);
+              // Allow auto-refresh again after a short delay
+              setTimeout(() => setIsUserInteracting(false), 500);
+            }}
+            onMouseEnter={() => setIsUserInteracting(true)}
+            onMouseLeave={() => setIsUserInteracting(false)}
             className="stream-input"
             style={{ maxWidth: '300px', padding: '12px', fontSize: '16px' }}
             disabled={false}
@@ -256,7 +468,9 @@ const SimpleReactPlayer: React.FC = () => {
             {availableStreams.length > 0 ? (
               availableStreams.map((stream) => (
                 <option key={stream.name} value={stream.name}>
-                  {stream.status === 'active' ? '🔴' : '⚪'} {stream.name.toUpperCase()} 
+                  {stream.status === 'active' ? '🔴' : '⚪'}
+                  {stream.isNew ? '🆕 ' : ''}
+                  {stream.name.toUpperCase()}
                   {stream.status === 'active' ? ' (LIVE)' : ' (Ready)'}
                   {stream.file_count > 0 ? ` - ${stream.file_count} files` : ''}
                 </option>
