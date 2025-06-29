@@ -49,6 +49,12 @@ const SimpleReactPlayer: React.FC = () => {
   const [lastAutoRefresh, setLastAutoRefresh] = useState<Date>(new Date());
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
 
+  // Connection quality monitoring
+  const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor' | 'critical'>('good');
+  const [currentBandwidth, setCurrentBandwidth] = useState<number>(0);
+  const [bufferHealth, setBufferHealth] = useState<number>(0);
+  const [qualityLocked, setQualityLocked] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const dropdownRef = useRef<HTMLSelectElement>(null);
@@ -244,21 +250,77 @@ const SimpleReactPlayer: React.FC = () => {
 
     if (Hls.isSupported()) {
       addLog('🔧 Using HLS.js for playback');
-      addLog('⚡ Low-latency mode enabled (6s target latency)');
-      
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        liveSyncDurationCount: 3,     // 3 × 2s = 6s latency per O3 communication
-        liveMaxLatencyDurationCount: 5,
-        backBufferLength: 30,         // 30 seconds back buffer per O3 communication
-        maxBufferLength: 15,          // Reduced for lower latency
-        maxMaxBufferLength: 30,       // Reduced for lower latency
-        manifestLoadingTimeOut: 5000,
-        fragLoadingTimeOut: 5000,
-        liveDurationInfinity: true,   // Enable live streaming mode
-        debug: false
-      });
+      addLog('⚡ Adaptive streaming enabled for all connection types');
+
+      // Adaptive configuration based on connection quality
+      const getHLSConfig = () => {
+        const baseConfig = {
+          enableWorker: true,
+          liveDurationInfinity: true,
+          debug: false,
+          // Aggressive ABR for poor connections
+          abrEwmaFastLive: 3.0,        // Fast adaptation to bandwidth changes
+          abrEwmaSlowLive: 9.0,        // Slower smoothing for stability
+          abrMaxWithRealBitrate: true, // Use real measured bitrate
+          abrBandWidthFactor: 0.7,     // Conservative bandwidth estimation
+          abrBandWidthUpFactor: 0.6,   // Even more conservative for upgrades
+        };
+
+        // Adjust settings based on connection quality
+        switch (connectionQuality) {
+          case 'critical':
+            return {
+              ...baseConfig,
+              lowLatencyMode: false,
+              liveSyncDurationCount: 1,
+              liveMaxLatencyDurationCount: 2,
+              maxBufferLength: 4,
+              maxMaxBufferLength: 8,
+              manifestLoadingTimeOut: 10000,
+              fragLoadingTimeOut: 10000,
+              abrBandWidthFactor: 0.5,   // Very conservative
+              startLevel: 0,             // Force start with lowest quality
+            };
+          case 'poor':
+            return {
+              ...baseConfig,
+              lowLatencyMode: false,
+              liveSyncDurationCount: 2,
+              liveMaxLatencyDurationCount: 3,
+              maxBufferLength: 6,
+              maxMaxBufferLength: 12,
+              manifestLoadingTimeOut: 8000,
+              fragLoadingTimeOut: 8000,
+              abrBandWidthFactor: 0.6,
+              startLevel: 0,
+            };
+          case 'good':
+            return {
+              ...baseConfig,
+              lowLatencyMode: true,
+              liveSyncDurationCount: 3,
+              liveMaxLatencyDurationCount: 5,
+              maxBufferLength: 15,
+              maxMaxBufferLength: 30,
+              manifestLoadingTimeOut: 5000,
+              fragLoadingTimeOut: 5000,
+            };
+          case 'excellent':
+          default:
+            return {
+              ...baseConfig,
+              lowLatencyMode: true,
+              liveSyncDurationCount: 2,
+              liveMaxLatencyDurationCount: 4,
+              maxBufferLength: 20,
+              maxMaxBufferLength: 40,
+              manifestLoadingTimeOut: 3000,
+              fragLoadingTimeOut: 3000,
+            };
+        }
+      };
+
+      const hls = new Hls(getHLSConfig());
       
       hls.loadSource(streamUrl);
       hls.attachMedia(videoRef.current);
@@ -271,35 +333,95 @@ const SimpleReactPlayer: React.FC = () => {
         setIsLoading(false);
       });
 
-      // Track live edge position
-      hls.on(Hls.Events.FRAG_LOADED, () => {
+      // Track live edge position and connection quality
+      hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
         if (videoRef.current && hls.liveSyncPosition !== null) {
           const currentTime = videoRef.current.currentTime;
           const liveEdge = hls.liveSyncPosition;
           const timeBehind = liveEdge - currentTime;
-          
+
           // Consider "live" if within 10 seconds of live edge
           setIsLiveEdge(timeBehind < 10);
+
+          // Monitor bandwidth and connection quality
+          if (data.frag && data.frag.stats) {
+            const stats = data.frag.stats;
+            const bandwidth = (stats.total * 8) / (stats.loading.end - stats.loading.start); // bits per ms
+            const bandwidthKbps = Math.round(bandwidth);
+
+            setCurrentBandwidth(bandwidthKbps);
+
+            // Update connection quality based on bandwidth and buffer health
+            const bufferLength = videoRef.current.buffered.length > 0
+              ? videoRef.current.buffered.end(0) - videoRef.current.currentTime
+              : 0;
+            setBufferHealth(bufferLength);
+
+            // Determine connection quality
+            let quality: 'excellent' | 'good' | 'poor' | 'critical' = 'good';
+            if (bandwidthKbps > 3000 && bufferLength > 5) {
+              quality = 'excellent';
+            } else if (bandwidthKbps > 1500 && bufferLength > 3) {
+              quality = 'good';
+            } else if (bandwidthKbps > 800 && bufferLength > 1) {
+              quality = 'poor';
+            } else {
+              quality = 'critical';
+            }
+
+            if (quality !== connectionQuality) {
+              setConnectionQuality(quality);
+              addLog(`📊 Connection: ${quality.toUpperCase()} (${bandwidthKbps} kbps, ${bufferLength.toFixed(1)}s buffer)`);
+            }
+          }
         }
       });
       
+      // Enhanced error handling for poor connections
       hls.on(Hls.Events.ERROR, (event, data) => {
         addLog(`❌ HLS Error: ${data.details}`);
-        
+
+        // Handle buffer stalling for poor connections
+        if (data.details === 'bufferStalledError' || data.details === 'bufferNudgeOnStall') {
+          if (connectionQuality === 'critical' || connectionQuality === 'poor') {
+            addLog('📉 Poor connection detected - forcing lowest quality');
+            hls.currentLevel = 0; // Force lowest quality
+            setQualityLocked(true);
+          }
+        }
+
+        // Handle fragment loading errors more aggressively
+        if (data.details === 'fragLoadError' || data.details === 'fragLoadTimeOut') {
+          const retryDelay = connectionQuality === 'critical' ? 3000 : 1000;
+          addLog(`🔄 Fragment error - retrying in ${retryDelay}ms...`);
+          setTimeout(() => {
+            hls.startLoad();
+          }, retryDelay);
+          return;
+        }
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              addLog('🔄 Network error - retrying...');
+              const networkRetryDelay = connectionQuality === 'critical' ? 5000 : 2000;
+              addLog(`🔄 Network error - retrying in ${networkRetryDelay}ms...`);
+
+              // For critical connections, try to restart with lowest quality
+              if (connectionQuality === 'critical') {
+                setConnectionQuality('critical');
+                addLog('🚨 Critical connection - switching to emergency mode');
+              }
+
               setTimeout(() => {
                 hls.startLoad();
-              }, 1000);
+              }, networkRetryDelay);
               break;
-              
+
             case Hls.ErrorTypes.MEDIA_ERROR:
               addLog('🔧 Media error - recovering...');
               hls.recoverMediaError();
               break;
-              
+
             default:
               addLog('💀 Fatal HLS error');
               setIsLoading(false);
