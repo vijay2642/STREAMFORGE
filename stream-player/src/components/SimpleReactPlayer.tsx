@@ -37,6 +37,8 @@ interface ActiveTranscodersResponse {
 
 const SimpleReactPlayer: React.FC = () => {
   const [streamKey, setStreamKey] = useState('stream1');
+  const [selectedQuality, setSelectedQuality] = useState('auto');
+  const [availableQualities, setAvailableQualities] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [availableStreams, setAvailableStreams] = useState<StreamInfo[]>([]);
@@ -265,6 +267,13 @@ const SimpleReactPlayer: React.FC = () => {
       
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         addLog('✅ HLS manifest loaded successfully');
+        
+        // Extract available quality levels
+        const levels = hls.levels;
+        const qualities = ['auto', ...levels.map(level => `${level.height}p`)];
+        setAvailableQualities(qualities);
+        addLog(`🎯 Available qualities: ${qualities.join(', ')}`);
+        
         videoRef.current?.play().catch(err => {
           addLog(`⚠️ Autoplay blocked: ${err.message}`);
         });
@@ -337,6 +346,27 @@ const SimpleReactPlayer: React.FC = () => {
 
   const clearLogs = () => {
     setLogs([]);
+  };
+
+  const changeQuality = (quality: string) => {
+    if (!hlsRef.current) return;
+    
+    setSelectedQuality(quality);
+    
+    if (quality === 'auto') {
+      hlsRef.current.currentLevel = -1; // Auto quality
+      addLog('🎯 Quality set to AUTO (adaptive)');
+    } else {
+      const qualityHeight = parseInt(quality.replace('p', ''));
+      const levelIndex = hlsRef.current.levels.findIndex(level => level.height === qualityHeight);
+      
+      if (levelIndex !== -1) {
+        hlsRef.current.currentLevel = levelIndex;
+        addLog(`🎯 Quality manually set to ${quality}`);
+      } else {
+        addLog(`❌ Quality ${quality} not available`);
+      }
+    }
   };
 
   const goToLive = () => {
@@ -514,10 +544,53 @@ const SimpleReactPlayer: React.FC = () => {
           >
             {isLiveEdge ? '🟢 LIVE' : '🔴 GO LIVE'}
           </button>
+        </div>
+
+        {/* Quality Selector - Only show when stream is loaded */}
+        {availableQualities.length > 0 && (
+          <div className="control-group" style={{ marginTop: '15px' }}>
+            <label style={{ marginRight: '10px', fontWeight: 'bold', color: '#333' }}>
+              🎯 Quality:
+            </label>
+            <select
+              value={selectedQuality}
+              onChange={(e) => changeQuality(e.target.value)}
+              className="quality-selector"
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                borderRadius: '4px',
+                border: '2px solid #ddd',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+                minWidth: '120px'
+              }}
+            >
+              {availableQualities.map((quality) => (
+                <option key={quality} value={quality}>
+                  {quality === 'auto' ? '🤖 AUTO (Adaptive)' : `📺 ${quality.toUpperCase()}`}
+                </option>
+              ))}
+            </select>
+            <span style={{ 
+              marginLeft: '15px', 
+              fontSize: '12px', 
+              color: '#666',
+              fontStyle: 'italic'
+            }}>
+              {selectedQuality === 'auto' 
+                ? 'HLS.js will automatically select the best quality' 
+                : `Manually locked to ${selectedQuality}`
+              }
+            </span>
+          </div>
+        )}
+
+        <div className="control-group" style={{ marginTop: '15px' }}>
           <button 
             onClick={clearLogs} 
             className="clear-btn"
-            style={{ marginLeft: '10px' }}
+            style={{ padding: '8px 15px' }}
           >
             🗑️ Clear Logs
           </button>
