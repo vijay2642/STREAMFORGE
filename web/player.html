@@ -477,7 +477,7 @@
 
             try {
                 // Check if stream exists
-                const response = await fetch(`http://localhost:3001/api/transcode/active`);
+                const response = await fetch(`${window.location.origin}/api/transcode/active`);
                 const data = await response.json();
                 
                 const streamExists = data.data?.some(s => s.stream_key === streamName);
@@ -491,7 +491,7 @@
                 await loadMasterPlaylist(streamName);
                 
                 // Load the stream
-                const streamUrl = `http://localhost:3001/hls/${streamName}/master.m3u8`;
+                const streamUrl = `${window.location.origin}/hls/${streamName}/master.m3u8`;
                 player.src({
                     src: streamUrl,
                     type: 'application/x-mpegURL'
@@ -508,7 +508,7 @@
 
         async function loadMasterPlaylist(streamName) {
             try {
-                const response = await fetch(`http://localhost:3001/hls/${streamName}/master.m3u8`);
+                const response = await fetch(`${window.location.origin}/hls/${streamName}/master.m3u8`);
                 const playlistText = await response.text();
                 
                 if (response.ok) {
@@ -545,7 +545,7 @@
                             name: qualityName,
                             bandwidth: bandwidth,
                             resolution: resolution,
-                            url: `http://localhost:3001/hls/${streamName}/${url.trim()}`
+                            url: `${window.location.origin}/hls/${streamName}/${url.trim()}`
                         });
                     }
                 }
@@ -598,7 +598,7 @@
             
             if (qualityName === 'auto') {
                 // Use master playlist for auto quality
-                const autoUrl = `http://localhost:3001/hls/${currentStream}/master.m3u8`;
+                const autoUrl = `${window.location.origin}/hls/${currentStream}/master.m3u8`;
                 player.src({
                     src: autoUrl,
                     type: 'application/x-mpegURL'

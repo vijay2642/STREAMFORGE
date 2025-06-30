@@ -107,8 +107,10 @@ class APIProxyHandler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     port = 3001
     server = HTTPServer(('0.0.0.0', port), APIProxyHandler)
-    print(f"🔧 API Proxy running on http://localhost:{port}")
-    print(f"🎬 Quality Tester: http://localhost:{port}")
+    print(f"🔧 API Proxy running on all interfaces:")
+    print(f"🌐 External access: http://188.245.163.8:{port}")
+    print(f"🏠 Local access: http://localhost:{port}")
+    print(f"🎬 Quality Tester: http://188.245.163.8:{port}")
     print(f"📡 Proxying to transcoder: http://localhost:8083")
     print(f"📺 Proxying to HLS server: http://localhost:8085")
     

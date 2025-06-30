@@ -125,7 +125,7 @@
                 data-position="top-right"
                 data-theme="dark"
                 poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='400'%3E%3Crect width='100%25' height='100%25' fill='%23333'/%3E%3Ctext x='50%25' y='50%25' fill='white' text-anchor='middle' dy='.3em' font-family='Arial' font-size='24'%3EStreamForge Demo%3C/text%3E%3C/svg%3E">
-                <source src="http://localhost:3001/hls/stream1/master.m3u8" type="application/x-mpegURL">
+                <source src="/hls/stream1/master.m3u8" type="application/x-mpegURL">
                 Your browser does not support the video tag.
             </video>
         </div>
@@ -287,7 +287,7 @@ hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
         // Demo functions
         function loadDemo(streamName) {
             const video = document.getElementById('demoVideo');
-            video.src = `http://localhost:3001/hls/${streamName}/master.m3u8`;
+            video.src = `/hls/${streamName}/master.m3u8`;
             video.load();
         }
         
