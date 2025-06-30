@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
 	"strings"
@@ -54,6 +53,7 @@ type StreamManager struct {
 	activeStreams map[string]*StreamInfo
 	mutex         sync.RWMutex
 	nginxStatURL  string
+	transcoderURL string
 	outputDir     string
 }
 
@@ -74,9 +74,15 @@ func NewStreamManager() *StreamManager {
 		nginxURL = "http://nginx-rtmp:8080"
 	}
 
+	transcoderURL := os.Getenv("TRANSCODER_URL")
+	if transcoderURL == "" {
+		transcoderURL = "http://transcoder:8083"
+	}
+
 	return &StreamManager{
 		activeStreams: make(map[string]*StreamInfo),
 		nginxStatURL:  nginxURL + "/stat",
+		transcoderURL: transcoderURL,
 		outputDir:     "/tmp/hls_shared",
 	}
 }
@@ -243,48 +249,39 @@ func (sm *StreamManager) fixStreamNames(stats *RTMPStats, xmlContent string) {
 func (sm *StreamManager) startTranscoder(streamName string) {
 	log.Printf("🎬 Starting transcoder for stream: %s", streamName)
 
-	// Create output directory
-	streamDir := fmt.Sprintf("%s/%s", sm.outputDir, streamName)
-	os.MkdirAll(streamDir, 0755)
-
-	// Start transcoding script
-	cmd := exec.Command("/root/STREAMFORGE/scripts/transcode.sh", streamName)
-	cmd.Dir = "/root/STREAMFORGE"
-
-	err := cmd.Start()
+	// Call the transcoder service API instead of the old script
+	url := fmt.Sprintf("%s/transcode/start/%s", sm.transcoderURL, streamName)
+	resp, err := http.Post(url, "application/json", nil)
 	if err != nil {
 		log.Printf("❌ Failed to start transcoder for %s: %v", streamName, err)
 		return
 	}
+	defer resp.Body.Close()
 
-	sm.mutex.Lock()
-	if streamInfo, exists := sm.activeStreams[streamName]; exists {
-		streamInfo.TranscoderPID = cmd.Process.Pid
+	if resp.StatusCode == http.StatusOK {
+		log.Printf("✅ Transcoder started for %s via API", streamName)
+	} else {
+		log.Printf("❌ Transcoder API returned status %d for %s", resp.StatusCode, streamName)
 	}
-	sm.mutex.Unlock()
-
-	log.Printf("✅ Transcoder started for %s (PID: %d)", streamName, cmd.Process.Pid)
 }
 
 func (sm *StreamManager) stopTranscoder(streamName string) {
-	sm.mutex.RLock()
-	streamInfo, exists := sm.activeStreams[streamName]
-	sm.mutex.RUnlock()
+	log.Printf("🛑 Stopping transcoder for stream: %s", streamName)
 
-	if !exists || streamInfo.TranscoderPID == 0 {
+	// Call the transcoder service API to stop
+	url := fmt.Sprintf("%s/transcode/stop/%s", sm.transcoderURL, streamName)
+	resp, err := http.Post(url, "application/json", nil)
+	if err != nil {
+		log.Printf("❌ Failed to stop transcoder for %s: %v", streamName, err)
 		return
 	}
+	defer resp.Body.Close()
 
-	// Kill the transcoder process
-	if process, err := os.FindProcess(streamInfo.TranscoderPID); err == nil {
-		process.Kill()
-		log.Printf("🛑 Stopped transcoder for %s (PID: %d)", streamName, streamInfo.TranscoderPID)
+	if resp.StatusCode == http.StatusOK {
+		log.Printf("✅ Transcoder stopped for %s via API", streamName)
+	} else {
+		log.Printf("❌ Transcoder API returned status %d for %s", resp.StatusCode, streamName)
 	}
-
-	// Clean up HLS files
-	streamDir := fmt.Sprintf("%s/%s", sm.outputDir, streamName)
-	os.RemoveAll(streamDir)
-	log.Printf("🧹 Cleaned up files for stream: %s", streamName)
 }
 
 // HTTP Handlers

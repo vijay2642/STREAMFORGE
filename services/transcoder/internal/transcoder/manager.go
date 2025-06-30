@@ -49,6 +49,7 @@ type Manager struct {
 func NewManager(rtmpURL, outputDir string) *Manager {
 	// Define quality profiles matching working configuration
 	qualities := []Quality{
+		{Name: "1080p", Resolution: "1920x1080", VideoBitrate: "5000k", MaxBitrate: "5500k", BufSize: "5000k"},
 		{Name: "720p", Resolution: "1280x720", VideoBitrate: "2800k", MaxBitrate: "3000k", BufSize: "2800k"},
 		{Name: "480p", Resolution: "854x480", VideoBitrate: "1400k", MaxBitrate: "1500k", BufSize: "1400k"},
 		{Name: "360p", Resolution: "640x360", VideoBitrate: "800k", MaxBitrate: "900k", BufSize: "800k"},
@@ -421,6 +422,64 @@ func (m *Manager) GetActiveTranscoders() map[string]*TranscoderProcess {
 		}
 	}
 	return active
+}
+
+// CleanupStream removes all HLS files for a specific stream
+func (m *Manager) CleanupStream(streamKey string) error {
+	streamDir := filepath.Join(m.outputDir, streamKey)
+	
+	// Stop transcoder if it's running
+	if _, exists := m.processes[streamKey]; exists {
+		fmt.Printf("🛑 Stopping active transcoder for %s before cleanup\n", streamKey)
+		m.StopTranscoder(streamKey)
+	}
+	
+	// Remove the entire stream directory
+	if err := os.RemoveAll(streamDir); err != nil {
+		return fmt.Errorf("failed to remove stream directory %s: %w", streamDir, err)
+	}
+	
+	fmt.Printf("🧹 Cleaned up stream directory: %s\n", streamDir)
+	return nil
+}
+
+// CleanupAllStreams removes all HLS files for all streams
+func (m *Manager) CleanupAllStreams() error {
+	// Stop all active transcoders first
+	m.mutex.Lock()
+	activeStreams := make([]string, 0, len(m.processes))
+	for streamKey := range m.processes {
+		activeStreams = append(activeStreams, streamKey)
+	}
+	m.mutex.Unlock()
+	
+	// Stop all active transcoders
+	for _, streamKey := range activeStreams {
+		fmt.Printf("🛑 Stopping active transcoder for %s\n", streamKey)
+		m.StopTranscoder(streamKey)
+	}
+	
+	// Clean up all stream directories
+	entries, err := os.ReadDir(m.outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to read output directory: %w", err)
+	}
+	
+	cleanedCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			streamDir := filepath.Join(m.outputDir, entry.Name())
+			if err := os.RemoveAll(streamDir); err != nil {
+				fmt.Printf("⚠️ Failed to remove %s: %v\n", streamDir, err)
+			} else {
+				fmt.Printf("🧹 Cleaned up stream directory: %s\n", streamDir)
+				cleanedCount++
+			}
+		}
+	}
+	
+	fmt.Printf("✅ Cleaned up %d stream directories\n", cleanedCount)
+	return nil
 }
 
 // StopAll stops all active monitoring

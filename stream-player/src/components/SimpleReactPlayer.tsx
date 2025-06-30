@@ -597,7 +597,30 @@ const SimpleReactPlayer: React.FC = () => {
         </div>
       </div>
 
-      <div className="player-wrapper">
+      <div className="player-wrapper" style={{ position: 'relative' }}>
+        {/* Quality indicator overlay */}
+        {availableQualities.length > 0 && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            zIndex: 10,
+            border: '2px solid #007bff',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+          }}>
+            🎯 {selectedQuality === 'auto' ? 
+              `AUTO (${hlsRef.current && hlsRef.current.currentLevel >= 0 && hlsRef.current.levels[hlsRef.current.currentLevel] ? 
+                hlsRef.current.levels[hlsRef.current.currentLevel].height + 'p' : 'Loading'})` : 
+              selectedQuality
+            }
+          </div>
+        )}
         <video
           ref={videoRef}
           controls

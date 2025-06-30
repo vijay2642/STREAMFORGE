@@ -196,3 +196,48 @@ func (h *Handler) GetActiveTranscoders(c *gin.Context) {
 		"count":   len(result),
 	})
 }
+
+// CleanupStream handles requests to clean up HLS files for a stream
+func (h *Handler) CleanupStream(c *gin.Context) {
+	streamKey := c.Param("streamKey")
+
+	if streamKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "stream key is required",
+		})
+		return
+	}
+
+	err := h.transcoderManager.CleanupStream(streamKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"message":    "Stream directory cleaned successfully",
+		"stream_key": streamKey,
+	})
+}
+
+// CleanupAllStreams handles requests to clean up all HLS files
+func (h *Handler) CleanupAllStreams(c *gin.Context) {
+	err := h.transcoderManager.CleanupAllStreams()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "All stream directories cleaned successfully",
+	})
+}

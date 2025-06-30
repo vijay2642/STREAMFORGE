@@ -1,0 +1,13 @@
+{
+  "name": "streamforge-quality-test",
+  "version": "1.0.0",
+  "description": "Test script for StreamForge quality streaming",
+  "main": "test-quality-streaming.js",
+  "scripts": {
+    "test": "node test-quality-streaming.js",
+    "install-playwright": "npx playwright install"
+  },
+  "devDependencies": {
+    "playwright": "^1.53.1"
+  }
+}

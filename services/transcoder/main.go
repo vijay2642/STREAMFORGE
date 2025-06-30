@@ -130,6 +130,10 @@ func main() {
 	router.POST("/api/streams/stop/:streamKey", handler.StopTranscoder)
 	router.GET("/api/streams/status/:streamKey", handler.GetTranscoderStatus)
 
+	// Cleanup endpoints for maintaining standardized directory structure
+	router.DELETE("/transcode/cleanup/:streamKey", handler.CleanupStream)
+	router.DELETE("/transcode/cleanup", handler.CleanupAllStreams)
+
 	// HLS file serving with CORS support
 	router.GET("/hls/*filepath", HLSFileHandler(*outputDir))
 

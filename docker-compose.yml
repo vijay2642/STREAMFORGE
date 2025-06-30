@@ -11,9 +11,9 @@ services:
       - "${RTMP_PORT:-1935}:1935"   # RTMP ingestion
       - "${HTTP_PORT:-8080}:8080"   # HTTP/HLS serving
     volumes:
-      - hls_shared:/tmp/hls_shared
-      - recordings:/tmp/recordings
-      - logs:/var/log/streamforge
+      - ./data/hls_shared:/tmp/hls_shared
+      - ./data/recordings:/tmp/recordings
+      - ./data/logs:/var/log/streamforge
       - ./scripts:/scripts:ro
     environment:
       - NGINX_WORKER_PROCESSES=${NGINX_WORKER_PROCESSES:-auto}
@@ -41,8 +41,8 @@ services:
     ports:
       - "${TRANSCODER_PORT:-8083}:8083"   # Transcoder API
     volumes:
-      - hls_shared:/tmp/hls_shared
-      - logs:/app/logs
+      - ./data/hls_shared:/tmp/hls_shared
+      - ./data/logs:/app/logs
     environment:
       - PORT=8083
       - RTMP_URL=${RTMP_URL:-rtmp://nginx-rtmp:1935/live}
@@ -68,8 +68,8 @@ services:
     ports:
       - "${HLS_SERVER_PORT:-8085}:8085"   # HLS file serving
     volumes:
-      - hls_shared:/tmp/hls_shared:ro
-      - logs:/app/logs
+      - ./data/hls_shared:/tmp/hls_shared:ro
+      - ./data/logs:/app/logs
     environment:
       - PORT=8085
       - HLS_DIR=/tmp/hls_shared
@@ -93,9 +93,9 @@ services:
     ports:
       - "${ADMIN_API_PORT:-9000}:9000"   # Admin API
     volumes:
-      - hls_shared:/tmp/hls_shared:ro
-      - recordings:/tmp/recordings:ro
-      - logs:/app/logs
+      - ./data/hls_shared:/tmp/hls_shared:ro
+      - ./data/recordings:/tmp/recordings:ro
+      - ./data/logs:/app/logs
     environment:
       - PORT=9000
       - GIN_MODE=${GIN_MODE:-release}
@@ -140,8 +140,8 @@ services:
     ports:
       - "${STREAM_MANAGER_PORT:-8081}:8081"   # Stream management API
     volumes:
-      - hls_shared:/tmp/hls_shared
-      - logs:/app/logs
+      - ./data/hls_shared:/tmp/hls_shared
+      - ./data/logs:/app/logs
     environment:
       - PORT=8081
       - TRANSCODER_URL=${TRANSCODER_URL:-http://transcoder:8083}
@@ -162,26 +162,7 @@ services:
       nginx-rtmp:
         condition: service_healthy
 
-# Named volumes for persistent storage
-volumes:
-  hls_shared:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${HLS_DIR:-/tmp/streamforge/hls}
-  recordings:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${RECORDINGS_DIR:-/tmp/streamforge/recordings}
-  logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${LOGS_DIR:-./logs}
+# Named volumes for persistent storage (removed - using bind mounts instead)
 
 # Custom network for service communication
 networks:

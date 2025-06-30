@@ -33,20 +33,27 @@ fi
 log "INFO: Stream publish started - Name: $STREAM_NAME, Client: $CLIENT_ADDR"
 log "DEBUG: Script called with args: $*"
 
-# Create dynamic directory structure for the new stream
+# Clean up any existing stream directory first to ensure fresh start
 STREAM_DIR="$HLS_BASE_DIR/$STREAM_NAME"
-log "INFO: Creating directory structure for stream: $STREAM_NAME"
+if [ -d "$STREAM_DIR" ]; then
+    log "INFO: Cleaning existing directory for fresh start: $STREAM_DIR"
+    rm -rf "$STREAM_DIR"
+fi
 
-# Create all necessary directories
-mkdir -p "$STREAM_DIR"/{720p,480p,360p}
+log "INFO: Creating standardized directory structure for stream: $STREAM_NAME"
+
+# Create all necessary directories including 1080p following standard structure
+mkdir -p "$STREAM_DIR"/{1080p,720p,480p,360p}
 
 # Set proper permissions - make writable by all
 chmod -R 777 "$STREAM_DIR"
 
-# Create master playlist template
+# Create master playlist template with 1080p support
 cat > "$STREAM_DIR/master.m3u8" << EOF
 #EXTM3U
 #EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080,CODECS="avc1.64002a,mp4a.40.2"
+1080p/playlist.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=2996000,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
 720p/playlist.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=1498000,RESOLUTION=854x480,CODECS="avc1.64001e,mp4a.40.2"
