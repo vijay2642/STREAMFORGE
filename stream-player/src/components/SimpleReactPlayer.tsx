@@ -43,6 +43,12 @@ const SimpleReactPlayer: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLiveEdge, setIsLiveEdge] = useState(true);
 
+  // Quality detection state
+  const [currentQuality, setCurrentQuality] = useState('Auto');
+  const [detectedResolution, setDetectedResolution] = useState('');
+  const [detectedBandwidth, setDetectedBandwidth] = useState('');
+  const [showQualityDetails, setShowQualityDetails] = useState(false);
+
   // Smart auto-refresh state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isUserInteracting, setIsUserInteracting] = useState(false);
@@ -54,19 +60,61 @@ const SimpleReactPlayer: React.FC = () => {
   const dropdownRef = useRef<HTMLSelectElement>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Configure HLS server connection
+  // Configure server connections
   const host = process.env.REACT_APP_HLS_HOST || window.location.hostname;
-  const port = process.env.REACT_APP_HLS_PORT || '8083';
+  const hlsPort = process.env.REACT_APP_HLS_PORT || '8085';
+  const apiPort = process.env.REACT_APP_API_PORT || '8083';
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prev => [...prev.slice(-9), `${timestamp} - ${message}`]);
   };
 
+  // Quality detection function
+  const detectQuality = useCallback(() => {
+    if (!videoRef.current || !videoRef.current.videoWidth) return;
+    
+    const width = videoRef.current.videoWidth;
+    const height = videoRef.current.videoHeight;
+    const resolution = `${width}x${height}`;
+    
+    let quality = 'Unknown';
+    let bandwidth = '';
+    
+    if (height >= 1080) {
+      quality = '1080p';
+      bandwidth = '~5.0 Mbps';
+    } else if (height >= 720) {
+      quality = '720p';
+      bandwidth = '~2.8 Mbps';
+    } else if (height >= 480) {
+      quality = '480p';
+      bandwidth = '~1.4 Mbps';
+    } else if (height >= 360) {
+      quality = '360p';
+      bandwidth = '~0.8 Mbps';
+    }
+    
+    setCurrentQuality(quality);
+    setDetectedResolution(resolution);
+    setDetectedBandwidth(bandwidth);
+    
+    // Debug log
+    console.log('Quality detected:', quality, resolution, bandwidth);
+    
+    if (quality !== 'Unknown') {
+      addLog(`📺 Quality detected: ${quality} (${resolution})`);
+    }
+  }, []);
+
+  const toggleQualityDetails = () => {
+    setShowQualityDetails(!showQualityDetails);
+  };
+
   // Fetch active transcoders from the API
   const fetchActiveTranscoders = useCallback(async (): Promise<ActiveTranscoderInfo[]> => {
     try {
-      const response = await fetch(`http://${host}:${port}/transcode/active`);
+      const response = await fetch(`http://${host}:${apiPort}/transcode/active`);
       const data: ActiveTranscodersResponse = await response.json();
 
       if (data.success) {
@@ -77,7 +125,7 @@ const SimpleReactPlayer: React.FC = () => {
       console.warn('Failed to fetch active transcoders:', error);
       return [];
     }
-  }, [host, port]);
+  }, [host, apiPort]);
 
   // Smart merge function that preserves user selection and adds new streams
   const smartMergeStreams = useCallback((currentStreams: StreamInfo[], activeTranscoders: ActiveTranscoderInfo[]): StreamInfo[] => {
@@ -171,7 +219,7 @@ const SimpleReactPlayer: React.FC = () => {
       // Also try the legacy streams endpoint as fallback
       let legacyStreams: StreamInfo[] = [];
       try {
-        const response = await fetch(`http://${host}:${port}/streams`);
+        const response = await fetch(`http://${host}:${apiPort}/streams`);
         const data: StreamsResponse = await response.json();
         if (data.status === 'success') {
           legacyStreams = data.streams;
@@ -180,8 +228,10 @@ const SimpleReactPlayer: React.FC = () => {
         console.warn('Legacy streams endpoint failed:', legacyError);
       }
 
-      // Merge active transcoders with legacy streams or use fallback
-      const baseStreams = legacyStreams.length > 0 ? legacyStreams : [
+      // Merge active transcoders with legacy streams or use live streams only
+      const baseStreams = legacyStreams.length > 0 ? legacyStreams.filter(s => 
+        s.name === 'stream1' || s.name === 'stream2' || s.name === 'stream3'
+      ) : [
         { name: 'stream1', status: 'inactive', file_count: 0, last_update: '' },
         { name: 'stream2', status: 'inactive', file_count: 0, last_update: '' },
         { name: 'stream3', status: 'inactive', file_count: 0, last_update: '' }
@@ -204,14 +254,14 @@ const SimpleReactPlayer: React.FC = () => {
 
     } catch (error) {
       addLog(`❌ Failed to fetch streams: ${error}`);
-      // Ultimate fallback
+      // Ultimate fallback - live streams only
       const fallbackStreams: StreamInfo[] = [
         { name: 'stream1', status: 'inactive', file_count: 0, last_update: '' },
         { name: 'stream2', status: 'inactive', file_count: 0, last_update: '' },
         { name: 'stream3', status: 'inactive', file_count: 0, last_update: '' }
       ];
       setAvailableStreams(fallbackStreams);
-      addLog(`🔧 Using fallback streams: stream1, stream2, stream3`);
+      addLog(`🔧 Using live streams only: stream1, stream2, stream3`);
     } finally {
       setIsRefreshing(false);
       // Allow auto-refresh again after a short delay
@@ -226,7 +276,7 @@ const SimpleReactPlayer: React.FC = () => {
     }
 
     setIsLoading(true);
-    const streamUrl = `http://${host}:${port}/hls/${streamKey}/master.m3u8`;
+    const streamUrl = `http://${host}:${hlsPort}/hls/${streamKey}/master.m3u8`;
     addLog(`📡 Loading stream: ${streamKey}`);
     addLog(`🔗 URL: ${streamUrl}`);
     
@@ -257,6 +307,19 @@ const SimpleReactPlayer: React.FC = () => {
         manifestLoadingTimeOut: 5000,
         fragLoadingTimeOut: 5000,
         liveDurationInfinity: true,   // Enable live streaming mode
+        
+        // SMART QUALITY DEFAULTS - Start High, Adapt Down Only If Needed
+        startLevel: 0,                           // Always start with highest (1080p)
+        autoStartLoad: true,                     // Auto start loading
+        abrEwmaDefaultEstimate: 100000000,       // Assume 100 Mbps bandwidth
+        abrEwmaSlowVoD: 0.99,                   // Extremely slow to adapt down
+        abrEwmaFastVoD: 0.99,                   // Extremely slow to adapt down  
+        abrBandWidthFactor: 0.7,                // Only switch down at 70% estimated bandwidth
+        abrBandWidthUpFactor: 0.8,              // Switch up at 80% bandwidth usage
+        abrMaxWithRealBitrate: false,           // Don't use real measured bitrate initially
+        capLevelToPlayerSize: false,            // Don't limit quality to player size
+        testBandwidth: false,                   // Skip initial bandwidth test
+        
         debug: false
       });
       
@@ -265,13 +328,26 @@ const SimpleReactPlayer: React.FC = () => {
       
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         addLog('✅ HLS manifest loaded successfully');
+        addLog(`🎯 Available levels: ${hls.levels.length}`);
+        hls.levels.forEach((level, index) => {
+          addLog(`Level ${index}: ${level.height}p (${level.width}x${level.height}) ${Math.round(level.bitrate/1000)}k`);
+        });
+        
+        // Force to highest quality (1080p) immediately
+        if (hls.levels.length > 0) {
+          hls.currentLevel = 0; // Force level 0 (1080p)
+          addLog(`🚀 FORCED to Level 0 (1080p): ${hls.levels[0].height}p`);
+        }
+        
         videoRef.current?.play().catch(err => {
           addLog(`⚠️ Autoplay blocked: ${err.message}`);
         });
         setIsLoading(false);
+        // Detect quality after manifest is loaded
+        setTimeout(detectQuality, 1000);
       });
 
-      // Track live edge position
+      // Track live edge position and quality
       hls.on(Hls.Events.FRAG_LOADED, () => {
         if (videoRef.current && hls.liveSyncPosition !== null) {
           const currentTime = videoRef.current.currentTime;
@@ -280,7 +356,40 @@ const SimpleReactPlayer: React.FC = () => {
           
           // Consider "live" if within 10 seconds of live edge
           setIsLiveEdge(timeBehind < 10);
+          
+          // Detect quality periodically
+          detectQuality();
         }
+      });
+
+      // Listen for quality level changes
+      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+        const level = hls.levels[data.level];
+        addLog(`🎯 Quality switched to level ${data.level}: ${level.height}p (${level.width}x${level.height})`);
+        
+        // If it's not 1080p (level 0), force it back to 1080p
+        if (data.level !== 0 && hls.levels.length > 0) {
+          setTimeout(() => {
+            hls.currentLevel = 0;
+            addLog(`🔒 Auto-corrected back to Level 0 (1080p) from ${level.height}p`);
+          }, 100);
+        }
+        
+        setTimeout(detectQuality, 500); // Detect after level switch
+      });
+
+      // Force to highest quality after manifest loads
+      hls.on(Hls.Events.MANIFEST_LOADED, () => {
+        addLog(`🎯 Manifest loaded - forcing 1080p start...`);
+        hls.currentLevel = 0; // Force highest quality (1080p)
+        addLog(`🚀 Set currentLevel = 0 (1080p)`);
+        addLog(`📊 Current level after setting: ${hls.currentLevel}`);
+      });
+
+      // Log ABR decisions to understand quality switching
+      hls.on(Hls.Events.LEVEL_SWITCHING, (event, data) => {
+        const level = hls.levels[data.level];
+        addLog(`⚡ Switching TO level ${data.level}: ${level.height}p`);
       });
       
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -372,6 +481,21 @@ const SimpleReactPlayer: React.FC = () => {
     });
   };
 
+  const force1080p = () => {
+    if (!hlsRef.current) {
+      addLog('❌ HLS not available');
+      return;
+    }
+    
+    if (hlsRef.current.levels && hlsRef.current.levels.length > 0) {
+      hlsRef.current.currentLevel = 0; // Force level 0 (highest quality)
+      addLog('🚀 Manually forced to 1080p (Level 0)');
+      setTimeout(detectQuality, 1000);
+    } else {
+      addLog('❌ No quality levels available');
+    }
+  };
+
   useEffect(() => {
     addLog('🚀 React Stream Player Ready');
     addLog(`📱 HLS.js supported: ${Hls.isSupported()}`);
@@ -379,11 +503,15 @@ const SimpleReactPlayer: React.FC = () => {
     // Fetch available streams on load
     fetchAvailableStreams();
     
+    // Set up quality detection interval
+    const qualityInterval = setInterval(detectQuality, 3000);
+    
     return () => {
       // Cleanup HLS on unmount
       if (hlsRef.current) {
         hlsRef.current.destroy();
       }
+      clearInterval(qualityInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -521,10 +649,123 @@ const SimpleReactPlayer: React.FC = () => {
           >
             🗑️ Clear Logs
           </button>
+          <button 
+            onClick={force1080p}
+            disabled={!streamKey || isLoading}
+            className="quality-btn"
+            style={{ 
+              marginLeft: '10px',
+              backgroundColor: '#FF6B6B',
+              color: 'white',
+              fontWeight: 'bold',
+              border: '2px solid #FF9999',
+              padding: '12px 20px',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            🎯 Force 1080p
+          </button>
         </div>
       </div>
 
-      <div className="player-wrapper">
+      <div className="player-wrapper" style={{ position: 'relative' }}>
+        {/* Quality Widget Overlay */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '15px',
+            right: '15px',
+            zIndex: 9999,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            pointerEvents: 'none'
+          }}
+        >
+          <div 
+            onClick={toggleQualityDetails}
+            style={{
+              background: 'rgba(0, 0, 0, 0.85)',
+              color: 'white',
+              padding: '10px 16px',
+              borderRadius: '25px',
+              fontSize: '14px',
+              fontWeight: '600',
+              border: `2px solid ${currentQuality === '1080p' ? '#FF6B6B' : 
+                                  currentQuality === '720p' ? '#4ECDC4' : 
+                                  currentQuality === '480p' ? '#45B7D1' : 
+                                  currentQuality === '360p' ? '#96CEB4' : '#4CAF50'}`,
+              backdropFilter: 'blur(15px)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+              pointerEvents: 'auto',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span 
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: '#4CAF50',
+                display: 'inline-block',
+                animation: 'pulse 2s infinite'
+              }}
+            />
+            📺 {currentQuality || 'Auto'} {detectedResolution && `- ${detectedResolution}`} {detectedBandwidth && `@ ${detectedBandwidth.replace('~', '')}`}
+          </div>
+          
+          {showQualityDetails && (
+            <div 
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: '0',
+                marginTop: '10px',
+                background: 'rgba(0, 0, 0, 0.9)',
+                color: 'white',
+                padding: '15px',
+                borderRadius: '10px',
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                minWidth: '220px',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                pointerEvents: 'auto'
+              }}
+            >
+              <div style={{ marginBottom: '12px', fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' }}>
+                📺 Stream Quality Info
+              </div>
+              <div style={{ margin: '8px 0', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#4CAF50', fontWeight: '500' }}>Quality:</span>
+                <span style={{ color: 'white', fontWeight: '600' }}>{currentQuality}</span>
+              </div>
+              <div style={{ margin: '8px 0', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#4CAF50', fontWeight: '500' }}>Resolution:</span>
+                <span style={{ color: 'white', fontWeight: '600' }}>{detectedResolution || '-'}</span>
+              </div>
+              <div style={{ margin: '8px 0', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#4CAF50', fontWeight: '500' }}>Bandwidth:</span>
+                <span style={{ color: 'white', fontWeight: '600' }}>{detectedBandwidth || '-'}</span>
+              </div>
+              <div style={{ margin: '8px 0', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#4CAF50', fontWeight: '500' }}>Codec:</span>
+                <span style={{ color: 'white', fontWeight: '600' }}>
+                  {currentQuality === '1080p' ? 'H.264 Level 4.0' : 
+                   currentQuality === '720p' ? 'H.264 Level 3.1' :
+                   currentQuality === '480p' ? 'H.264 Level 3.1' :
+                   currentQuality === '360p' ? 'H.264 Level 3.0' : 'H.264'}
+                </span>
+              </div>
+              <div style={{ marginTop: '12px', fontSize: '11px', opacity: '0.7', textAlign: 'center' }}>
+                📊 Real-time quality monitoring
+              </div>
+            </div>
+          )}
+        </div>
+
         <video
           ref={videoRef}
           controls
@@ -537,9 +778,19 @@ const SimpleReactPlayer: React.FC = () => {
             borderRadius: '8px'
           }}
           onLoadStart={() => addLog('📥 Loading started')}
-          onLoadedData={() => addLog('📊 Stream data loaded')}
+          onLoadedData={() => {
+            addLog('📊 Stream data loaded');
+            detectQuality();
+          }}
+          onLoadedMetadata={() => {
+            addLog('📋 Metadata loaded');
+            detectQuality();
+          }}
           onCanPlay={() => addLog('✅ Ready to play')}
-          onPlay={() => addLog('▶️ Playing')}
+          onPlay={() => {
+            addLog('▶️ Playing');
+            detectQuality();
+          }}
           onPause={() => addLog('⏸️ Paused')}
           onWaiting={() => addLog('⏳ Buffering...')}
           onError={() => addLog('❌ Stream error')}
@@ -573,7 +824,7 @@ const SimpleReactPlayer: React.FC = () => {
             <strong>Type:</strong> HLS Live Stream
           </div>
           <div className="status-item">
-            <strong>Server:</strong> {host}:{port}
+            <strong>Server:</strong> {host}:{hlsPort}
           </div>
         </div>
       </div>
@@ -603,9 +854,9 @@ const SimpleReactPlayer: React.FC = () => {
           <div className="setup-card hls">
             <h4>🎬 HLS Playback</h4>
             <div className="setup-code">
-              http://{host}:{port}/hls/stream1/master.m3u8<br/>
-              http://{host}:{port}/hls/stream2/master.m3u8<br/>
-              http://{host}:{port}/hls/stream3/master.m3u8
+              http://{host}:{hlsPort}/hls/stream1/master.m3u8<br/>
+              http://{host}:{hlsPort}/hls/stream2/master.m3u8<br/>
+              http://{host}:{hlsPort}/hls/stream3/master.m3u8
             </div>
           </div>
           <div className="setup-card features">

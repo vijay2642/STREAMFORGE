@@ -32,8 +32,8 @@ HLS_DIR="/tmp/hls_shared/$STREAM_NAME"
 # Ensure output directories exist (they should be created by on_publish.sh)
 if [ ! -d "$HLS_DIR" ]; then
     log "INFO: Creating HLS directories for $STREAM_NAME (fallback)"
-    mkdir -p "$HLS_DIR"/{720p,480p,360p}
-    chmod 755 "$HLS_DIR"/{720p,480p,360p}
+    mkdir -p "$HLS_DIR"/{1080p,720p,480p,360p}
+    chmod 755 "$HLS_DIR"/{1080p,720p,480p,360p}
 else
     log "INFO: HLS directories already exist for $STREAM_NAME"
 fi
