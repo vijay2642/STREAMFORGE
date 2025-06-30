@@ -1,17 +1,70 @@
 #!/bin/bash
-# NGINX RTMP on_publish callback script
+# Enhanced NGINX RTMP on_publish callback script with dynamic stream management
 # NGINX passes: name, tcurl, addr, flashver, swfurl, pageurl, clientid
 
+# Removed strict error handling for debugging
+# set -euo pipefail
+
 STREAM_NAME="$1"
-TRANSCODER_URL="http://188.245.163.8:8083"
+CLIENT_ADDR="${2:-unknown}"
+TRANSCODER_URL="http://transcoder:8083"
+HLS_BASE_DIR="/tmp/hls_shared"
+LOG_FILE="/var/log/streamforge/rtmp.log"
 
-# Log the publish event
-echo "[$(date)] Stream published: $STREAM_NAME from $3" >> /var/log/streamforge/rtmp.log
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
 
-# Call the transcoder API to start transcoding
-curl -X POST "${TRANSCODER_URL}/api/streams/start/${STREAM_NAME}" \
-  -H "Content-Type: application/json" \
-  -d "{\"stream_name\":\"${STREAM_NAME}\"}" \
-  >> /var/log/streamforge/rtmp.log 2>&1
+# Validate stream name
+if [ -z "$STREAM_NAME" ]; then
+    log "ERROR: Stream name is empty"
+    exit 1
+fi
 
+# Sanitize stream name (remove potentially dangerous characters)
+STREAM_NAME=$(echo "$STREAM_NAME" | sed 's/[^a-zA-Z0-9_-]//g')
+
+if [ -z "$STREAM_NAME" ]; then
+    log "ERROR: Stream name is invalid after sanitization"
+    exit 1
+fi
+
+log "INFO: Stream publish started - Name: $STREAM_NAME, Client: $CLIENT_ADDR"
+log "DEBUG: Script called with args: $*"
+
+# Create dynamic directory structure for the new stream
+STREAM_DIR="$HLS_BASE_DIR/$STREAM_NAME"
+log "INFO: Creating directory structure for stream: $STREAM_NAME"
+
+# Create all necessary directories
+mkdir -p "$STREAM_DIR"/{720p,480p,360p}
+
+# Set proper permissions - make writable by all
+chmod -R 777 "$STREAM_DIR"
+
+# Create master playlist template
+cat > "$STREAM_DIR/master.m3u8" << EOF
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=2996000,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
+720p/playlist.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1498000,RESOLUTION=854x480,CODECS="avc1.64001e,mp4a.40.2"
+480p/playlist.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=856000,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2"
+360p/playlist.m3u8
+EOF
+
+log "INFO: Directory structure created successfully for stream: $STREAM_NAME"
+
+# Notify transcoder service about new stream
+log "INFO: Notifying transcoder service about new stream: $STREAM_NAME"
+curl -X POST "${TRANSCODER_URL}/transcode/start/${STREAM_NAME}" \
+  --connect-timeout 5 \
+  --max-time 10 \
+  >> "$LOG_FILE" 2>&1 || {
+    log "WARNING: Failed to notify transcoder service, but continuing..."
+}
+
+log "INFO: Stream publish setup completed for: $STREAM_NAME"
 exit 0

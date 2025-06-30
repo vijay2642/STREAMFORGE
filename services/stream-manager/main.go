@@ -69,9 +69,14 @@ type StreamInfo struct {
 }
 
 func NewStreamManager() *StreamManager {
+	nginxURL := os.Getenv("NGINX_URL")
+	if nginxURL == "" {
+		nginxURL = "http://nginx-rtmp:8080"
+	}
+
 	return &StreamManager{
 		activeStreams: make(map[string]*StreamInfo),
-		nginxStatURL:  "http://localhost:8080/stat",
+		nginxStatURL:  nginxURL + "/stat",
 		outputDir:     "/tmp/hls_shared",
 	}
 }
@@ -113,10 +118,17 @@ func (sm *StreamManager) checkStreams() {
 		isPublishing := stream.Publishing != nil
 		isActive := stream.Active != nil
 
-		log.Printf("🔍 Processing stream: name='%s', publishing=%v, active=%v", stream.Name, isPublishing, isActive)
+		// Fix: Properly trim whitespace and handle empty stream names
+		streamName := strings.TrimSpace(stream.Name)
+		if streamName == "" {
+			log.Printf("🔍 Skipping empty stream name")
+			continue
+		}
+
+		log.Printf("🔍 Processing stream: name='%s', publishing=%v, active=%v", streamName, isPublishing, isActive)
 
 		if isPublishing {
-			if existing, exists := sm.activeStreams[stream.Name]; exists {
+			if existing, exists := sm.activeStreams[streamName]; exists {
 				// Update existing stream
 				existing.Active = isActive
 				existing.Publishing = isPublishing
@@ -124,11 +136,11 @@ func (sm *StreamManager) checkStreams() {
 				existing.LastSeen = time.Now()
 				existing.BWIn = stream.BWIn
 				existing.BWOut = stream.BWOut
-				log.Printf("📡 Updated stream: %s (clients: %d, bw_in: %d)", stream.Name, stream.NClients, stream.BWIn)
+				log.Printf("📡 Updated stream: %s (clients: %d, bw_in: %d)", streamName, stream.NClients, stream.BWIn)
 			} else {
 				// New stream detected
 				streamInfo := &StreamInfo{
-					Name:       stream.Name,
+					Name:       streamName,
 					Active:     isActive,
 					Publishing: isPublishing,
 					Clients:    stream.NClients,
@@ -136,11 +148,11 @@ func (sm *StreamManager) checkStreams() {
 					BWIn:       stream.BWIn,
 					BWOut:      stream.BWOut,
 				}
-				sm.activeStreams[stream.Name] = streamInfo
-				log.Printf("🎬 New stream detected: %s", stream.Name)
+				sm.activeStreams[streamName] = streamInfo
+				log.Printf("🎬 New stream detected: %s", streamName)
 
 				// Start transcoder for new stream
-				go sm.startTranscoder(stream.Name)
+				go sm.startTranscoder(streamName)
 			}
 		}
 	}

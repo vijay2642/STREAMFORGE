@@ -156,6 +156,18 @@ func (m *Manager) releaseStreamLock(streamKey string) {
 
 // isProcessRunning checks if a process with given PID is running
 func isProcessRunning(pid int) bool {
+	// In container environments, PID 1 is always the init process
+	// If we're checking our own PID (which could be 1), consider it as "not conflicting"
+	currentPID := os.Getpid()
+	if pid == currentPID {
+		return false // Don't consider our own process as a conflict
+	}
+
+	// Special case: PID 1 in containers is init, not a transcoding process
+	if pid == 1 {
+		return false // Don't consider container init as a conflict
+	}
+
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false

@@ -114,10 +114,16 @@ func main() {
 	router.GET("/qualities", handler.GetQualityProfiles)
 
 	// Transcoder management endpoints
+	// Support both GET (for NGINX-RTMP callbacks) and POST (for manual/API calls)
+	router.GET("/transcode/start/:streamKey", handler.StartTranscoder)
+	router.GET("/transcode/stop/:streamKey", handler.StopTranscoder)
 	router.POST("/transcode/start/:streamKey", handler.StartTranscoder)
 	router.POST("/transcode/stop/:streamKey", handler.StopTranscoder)
 	router.GET("/transcode/status/:streamKey", handler.GetTranscoderStatus)
 	router.GET("/transcode/active", handler.GetActiveTranscoders)
+
+	// Legacy endpoint for web interface compatibility
+	router.GET("/streams", handler.GetActiveTranscoders)
 
 	// NGINX callback endpoints (called by NGINX on_publish/on_publish_done)
 	router.POST("/api/streams/start/:streamKey", handler.StartTranscoder)
