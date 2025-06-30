@@ -62,7 +62,11 @@ class APIProxyHandler(BaseHTTPRequestHandler):
         else:
             # Serve static files
             if self.path == '/' or self.path == '/index.html':
+                file_path = '/root/STREAMFORGE/web/player.html'
+            elif self.path == '/quality-test' or self.path == '/quality-test.html':
                 file_path = '/root/STREAMFORGE/web/quality-test.html'
+            elif self.path == '/player' or self.path == '/player.html':
+                file_path = '/root/STREAMFORGE/web/player.html'
             else:
                 file_path = f'/root/STREAMFORGE/web{self.path}'
             

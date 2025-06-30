@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamForge - Live Streaming with Quality Indicator</title>
+    <script src="https://vjs.zencdn.net/8.0.4/video.min.js"></script>
+    <link href="https://vjs.zencdn.net/8.0.4/video-js.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@videojs/http-streaming@3.0.2/dist/videojs-http-streaming.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .player-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .stream-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .stream-input {
+            flex: 1;
+            min-width: 250px;
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .video-js {
+            width: 100%;
+            height: 500px;
+            font-family: inherit;
+        }
+
+        .quality-overlay {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .quality-indicator {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border: 2px solid #4CAF50;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { border-color: #4CAF50; }
+            50% { border-color: #2196F3; }
+        }
+
+        .quality-selector {
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            min-width: 200px;
+        }
+
+        .quality-selector h4 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .quality-option {
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+            font-size: 13px;
+        }
+
+        .quality-option:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .quality-option.active {
+            background: #4CAF50;
+            border-color: #4CAF50;
+            font-weight: 600;
+        }
+
+        .quality-option.loading {
+            background: #FF9800;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.5; }
+        }
+
+        .stream-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 25px;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .info-card h3 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .info-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 5px;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            opacity: 0.7;
+            text-transform: uppercase;
+        }
+
+        .auto-quality {
+            font-size: 12px;
+            color: #FFD700;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .player-section {
+                padding: 20px;
+            }
+            
+            .quality-overlay {
+                top: 10px;
+                right: 10px;
+            }
+            
+            .quality-selector {
+                min-width: 150px;
+                padding: 10px;
+            }
+            
+            .stream-info {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">📺 StreamForge</div>
+        <div style="font-size: 14px; opacity: 0.8;">Live Streaming with Quality Control</div>
+    </div>
+
+    <div class="container">
+        <div class="player-section">
+            <div class="stream-controls">
+                <div class="stream-input">
+                    <input type="text" id="streamName" placeholder="Enter stream name (e.g., stream1)" value="stream1">
+                    <button onclick="loadStream()">🎬 Load Stream</button>
+                </div>
+                <button onclick="toggleQualitySelector()">⚙️ Quality</button>
+                <button onclick="refreshStream()">🔄 Refresh</button>
+            </div>
+
+            <div class="video-container">
+                <video-js
+                    id="streamPlayer"
+                    class="video-js vjs-default-skin"
+                    controls
+                    preload="auto"
+                    data-setup='{"fluid": true, "responsive": true}'>
+                    <p class="vjs-no-js">
+                        To view this video please enable JavaScript, and consider upgrading to a web browser that
+                        <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>.
+                    </p>
+                </video-js>
+
+                <div class="quality-overlay">
+                    <div class="quality-indicator" id="qualityIndicator">
+                        🎯 Auto Quality
+                    </div>
+                    
+                    <div class="quality-selector" id="qualitySelector" style="display: none;">
+                        <h4>📺 Quality Settings</h4>
+                        <div id="qualityOptions">
+                            <div class="quality-option" onclick="setQuality('auto')">
+                                🤖 Auto (Recommended)
+                            </div>
+                        </div>
+                        <div class="auto-quality">
+                            Automatically selects best quality<br>based on your connection
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Ready to stream</span>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="currentRes">-</div>
+                        <div class="stat-label">Resolution</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="currentBitrate">-</div>
+                        <div class="stat-label">Bitrate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="bufferHealth">-</div>
+                        <div class="stat-label">Buffer</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="viewTime">00:00</div>
+                        <div class="stat-label">Watching</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stream-info" id="streamInfo" style="display: none;">
+                <div class="info-card">
+                    <h3>📺 Current Quality</h3>
+                    <div class="info-value" id="detectedQuality">Auto</div>
+                    <div class="info-label">Video quality being played</div>
+                </div>
+                <div class="info-card">
+                    <h3>📊 Bandwidth</h3>
+                    <div class="info-value" id="detectedBandwidth">-</div>
+                    <div class="info-label">Current stream bandwidth</div>
+                </div>
+                <div class="info-card">
+                    <h3>🎭 Codec</h3>
+                    <div class="info-value" id="detectedCodec">H.264</div>
+                    <div class="info-label">Video compression</div>
+                </div>
+                <div class="info-card">
+                    <h3>📈 Available Qualities</h3>
+                    <div class="info-value" id="availableQualities">-</div>
+                    <div class="info-label">Total quality options</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let player;
+        let currentStream = '';
+        let availableQualitiesData = [];
+        let watchStartTime = 0;
+        let statsInterval;
+
+        // Initialize VideoJS player
+        document.addEventListener('DOMContentLoaded', function() {
+            player = videojs('streamPlayer', {
+                html5: {
+                    hls: {
+                        overrideNative: true,
+                        enableLowInitialPlaylist: true,
+                        smoothQualityChange: true,
+                        enableFastQualitySwitching: true
+                    }
+                },
+                controls: true,
+                fluid: true,
+                responsive: true
+            });
+
+            // Player event listeners
+            player.ready(() => {
+                console.log('Player ready');
+                setupPlayerEvents();
+            });
+        });
+
+        function setupPlayerEvents() {
+            // Track quality changes
+            player.on('loadedmetadata', () => {
+                updateVideoStats();
+                updateQualityIndicator();
+            });
+
+            player.on('play', () => {
+                watchStartTime = Date.now();
+                setStatus('🔴 Live', 'live');
+                startStatsUpdates();
+            });
+
+            player.on('pause', () => {
+                setStatus('⏸️ Paused', 'paused');
+                stopStatsUpdates();
+            });
+
+            player.on('error', (e) => {
+                setStatus('❌ Error', 'error');
+                console.error('Player error:', e);
+            });
+
+            player.on('waiting', () => {
+                setStatus('⏳ Buffering', 'buffering');
+            });
+
+            player.on('canplay', () => {
+                if (!player.paused()) {
+                    setStatus('🔴 Live', 'live');
+                }
+            });
+        }
+
+        async function loadStream() {
+            const streamName = document.getElementById('streamName').value.trim();
+            if (!streamName) {
+                alert('Please enter a stream name');
+                return;
+            }
+
+            currentStream = streamName;
+            setStatus('🔍 Loading stream...', 'loading');
+
+            try {
+                // Check if stream exists
+                const response = await fetch(`http://localhost:3001/api/transcode/active`);
+                const data = await response.json();
+                
+                const streamExists = data.data?.some(s => s.stream_key === streamName);
+                if (!streamExists) {
+                    setStatus('❌ Stream not found', 'error');
+                    alert(`Stream "${streamName}" is not active. Available streams: ${data.data?.map(s => s.stream_key).join(', ') || 'None'}`);
+                    return;
+                }
+
+                // Load master playlist
+                await loadMasterPlaylist(streamName);
+                
+                // Load the stream
+                const streamUrl = `http://localhost:3001/hls/${streamName}/master.m3u8`;
+                player.src({
+                    src: streamUrl,
+                    type: 'application/x-mpegURL'
+                });
+
+                setStatus('✅ Stream loaded', 'success');
+                document.getElementById('streamInfo').style.display = 'grid';
+
+            } catch (error) {
+                setStatus('❌ Load failed', 'error');
+                console.error('Load error:', error);
+            }
+        }
+
+        async function loadMasterPlaylist(streamName) {
+            try {
+                const response = await fetch(`http://localhost:3001/hls/${streamName}/master.m3u8`);
+                const playlistText = await response.text();
+                
+                if (response.ok) {
+                    parsePlaylistQualities(playlistText, streamName);
+                }
+            } catch (error) {
+                console.error('Playlist load error:', error);
+            }
+        }
+
+        function parsePlaylistQualities(playlistText, streamName) {
+            const lines = playlistText.split('\\n');
+            const qualities = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith('#EXT-X-STREAM-INF:')) {
+                    const info = lines[i];
+                    const url = lines[i + 1];
+                    
+                    const bandwidthMatch = info.match(/BANDWIDTH=(\\d+)/);
+                    const resolutionMatch = info.match(/RESOLUTION=(\\d+x\\d+)/);
+                    
+                    if (bandwidthMatch && url) {
+                        const bandwidth = parseInt(bandwidthMatch[1]);
+                        const resolution = resolutionMatch ? resolutionMatch[1] : 'Unknown';
+                        
+                        // Determine quality name
+                        const qualityName = url.includes('1080p') ? '1080p' :
+                                          url.includes('720p') ? '720p' :
+                                          url.includes('480p') ? '480p' :
+                                          url.includes('360p') ? '360p' : 'Unknown';
+                        
+                        qualities.push({
+                            name: qualityName,
+                            bandwidth: bandwidth,
+                            resolution: resolution,
+                            url: `http://localhost:3001/hls/${streamName}/${url.trim()}`
+                        });
+                    }
+                }
+            }
+            
+            availableQualitiesData = qualities;
+            updateQualityOptions();
+            updateStreamInfo();
+        }
+
+        function updateQualityOptions() {
+            const qualityOptions = document.getElementById('qualityOptions');
+            qualityOptions.innerHTML = `
+                <div class="quality-option active" onclick="setQuality('auto')">
+                    🤖 Auto (Recommended)
+                </div>
+            `;
+            
+            availableQualitiesData.forEach(quality => {
+                const bandwidth = (quality.bandwidth / 1000000).toFixed(1);
+                qualityOptions.innerHTML += `
+                    <div class="quality-option" onclick="setQuality('${quality.name}', '${quality.url}')">
+                        📺 ${quality.name} (${bandwidth} Mbps)
+                        <div style="font-size: 11px; opacity: 0.7;">${quality.resolution}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function updateStreamInfo() {
+            document.getElementById('availableQualities').textContent = availableQualitiesData.length;
+            
+            // Show 1080p availability prominently
+            const has1080p = availableQualitiesData.some(q => q.name === '1080p');
+            if (has1080p) {
+                document.getElementById('availableQualities').innerHTML = `
+                    ${availableQualitiesData.length} <br>
+                    <span style="color: #FFD700; font-size: 12px;">🎊 1080p Available!</span>
+                `;
+            }
+        }
+
+        function setQuality(qualityName, url = null) {
+            // Update UI
+            document.querySelectorAll('.quality-option').forEach(option => {
+                option.classList.remove('active', 'loading');
+            });
+            
+            event.target.classList.add('loading');
+            
+            if (qualityName === 'auto') {
+                // Use master playlist for auto quality
+                const autoUrl = `http://localhost:3001/hls/${currentStream}/master.m3u8`;
+                player.src({
+                    src: autoUrl,
+                    type: 'application/x-mpegURL'
+                });
+                updateQualityIndicator('🤖 Auto Quality', '#4CAF50');
+            } else {
+                // Use specific quality URL
+                player.src({
+                    src: url,
+                    type: 'application/x-mpegURL'
+                });
+                
+                const quality = availableQualitiesData.find(q => q.name === qualityName);
+                if (quality) {
+                    const bandwidth = (quality.bandwidth / 1000000).toFixed(1);
+                    updateQualityIndicator(`📺 ${qualityName} (${bandwidth} Mbps)`, getQualityColor(qualityName));
+                    
+                    // Update detected quality info
+                    document.getElementById('detectedQuality').textContent = qualityName;
+                    document.getElementById('detectedBandwidth').textContent = `${bandwidth} Mbps`;
+                    document.getElementById('currentRes').textContent = quality.resolution;
+                    document.getElementById('currentBitrate').textContent = `${bandwidth} Mbps`;
+                }
+            }
+            
+            // Mark as active after loading
+            setTimeout(() => {
+                event.target.classList.remove('loading');
+                event.target.classList.add('active');
+            }, 1000);
+        }
+
+        function getQualityColor(quality) {
+            switch(quality) {
+                case '1080p': return '#FF6B6B';
+                case '720p': return '#4ECDC4';
+                case '480p': return '#45B7D1';
+                case '360p': return '#96CEB4';
+                default: return '#4CAF50';
+            }
+        }
+
+        function updateQualityIndicator(text = null, color = null) {
+            const indicator = document.getElementById('qualityIndicator');
+            
+            if (text) {
+                indicator.textContent = text;
+            } else {
+                // Auto-detect current quality
+                if (player && player.videoWidth && player.videoHeight) {
+                    const resolution = `${player.videoWidth}x${player.videoHeight}`;
+                    let detectedQuality = 'Unknown';
+                    
+                    if (player.videoHeight >= 1080) detectedQuality = '1080p';
+                    else if (player.videoHeight >= 720) detectedQuality = '720p';
+                    else if (player.videoHeight >= 480) detectedQuality = '480p';
+                    else if (player.videoHeight >= 360) detectedQuality = '360p';
+                    
+                    indicator.textContent = `📺 ${detectedQuality} (${resolution})`;
+                    document.getElementById('detectedQuality').textContent = detectedQuality;
+                    document.getElementById('currentRes').textContent = resolution;
+                }
+            }
+            
+            if (color) {
+                indicator.style.borderColor = color;
+            }
+        }
+
+        function updateVideoStats() {
+            if (player && player.videoWidth && player.videoHeight) {
+                document.getElementById('currentRes').textContent = `${player.videoWidth}x${player.videoHeight}`;
+                
+                // Estimate bitrate based on resolution (approximation)
+                const pixels = player.videoWidth * player.videoHeight;
+                let estimatedBitrate = 'Unknown';
+                
+                if (pixels >= 1920 * 1080) estimatedBitrate = '~5.0 Mbps';
+                else if (pixels >= 1280 * 720) estimatedBitrate = '~2.8 Mbps';
+                else if (pixels >= 854 * 480) estimatedBitrate = '~1.4 Mbps';
+                else if (pixels >= 640 * 360) estimatedBitrate = '~0.8 Mbps';
+                
+                document.getElementById('currentBitrate').textContent = estimatedBitrate;
+            }
+        }
+
+        function startStatsUpdates() {
+            statsInterval = setInterval(() => {
+                // Update watch time
+                if (watchStartTime > 0) {
+                    const elapsed = Math.floor((Date.now() - watchStartTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = elapsed % 60;
+                    document.getElementById('viewTime').textContent = 
+                        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+                
+                // Update buffer health
+                if (player && player.buffered && player.buffered.length > 0) {
+                    const buffered = player.buffered.end(player.buffered.length - 1);
+                    const current = player.currentTime;
+                    const bufferHealth = Math.max(0, buffered - current);
+                    document.getElementById('bufferHealth').textContent = `${bufferHealth.toFixed(1)}s`;
+                }
+                
+                // Update quality indicator
+                updateQualityIndicator();
+            }, 1000);
+        }
+
+        function stopStatsUpdates() {
+            if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
+        }
+
+        function toggleQualitySelector() {
+            const selector = document.getElementById('qualitySelector');
+            selector.style.display = selector.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function refreshStream() {
+            if (currentStream) {
+                loadStream();
+            }
+        }
+
+        function setStatus(text, type) {
+            const statusText = document.getElementById('statusText');
+            const statusDot = document.getElementById('statusDot');
+            
+            statusText.textContent = text;
+            
+            // Update status dot color
+            const colors = {
+                'live': '#4CAF50',
+                'loading': '#FF9800', 
+                'error': '#F44336',
+                'paused': '#9E9E9E',
+                'buffering': '#2196F3',
+                'success': '#4CAF50'
+            };
+            
+            statusDot.style.background = colors[type] || '#4CAF50';
+        }
+
+        // Auto-load stream1 on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                loadStream();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
