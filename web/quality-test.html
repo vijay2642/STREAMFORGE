@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamForge Quality Tester</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .stream-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: #28a745;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        .quality-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .quality-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid transparent;
+        }
+        .quality-card.active {
+            border-color: #28a745;
+            box-shadow: 0 0 20px rgba(40, 167, 69, 0.3);
+        }
+        .quality-card h3 {
+            margin: 0 0 10px 0;
+            color: #fff;
+            font-size: 1.4em;
+        }
+        .bandwidth {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        .resolution {
+            color: #87ceeb;
+            font-size: 1.1em;
+        }
+        .codecs {
+            color: #ddd;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .status {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .current-quality {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .current-quality h2 {
+            margin: 0;
+            font-size: 2em;
+        }
+        .stream-urls {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .stream-urls h4 {
+            margin: 0 0 10px 0;
+            color: #ffd700;
+        }
+        .url-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            padding: 8px;
+            margin: 5px 0;
+            font-family: monospace;
+            word-break: break-all;
+            cursor: pointer;
+        }
+        .url-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .test-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .test-button {
+            background: #007bff;
+            flex: 1;
+            min-width: 120px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        #videoContainer {
+            background: #000;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        video {
+            width: 100%;
+            height: 400px;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 StreamForge Quality Tester</h1>
+        
+        <div class="stream-input">
+            <input type="text" id="streamName" placeholder="Enter stream name (e.g., stream1, test-1080p)" value="stream1">
+            <button onclick="loadStream()">🔍 Test Stream</button>
+            <button onclick="refreshData()">🔄 Refresh</button>
+        </div>
+        
+        <div class="status" id="status">
+            Enter a stream name and click "Test Stream" to begin quality analysis...
+        </div>
+        
+        <div class="current-quality" id="currentQuality" style="display: none;">
+            <h2 id="currentQualityText">Detecting Quality...</h2>
+            <div id="currentStats"></div>
+        </div>
+        
+        <div class="quality-info" id="qualityInfo"></div>
+        
+        <div class="stream-urls" id="streamUrls" style="display: none;">
+            <h4>📺 Direct Stream URLs:</h4>
+            <div id="urlList"></div>
+        </div>
+        
+        <div class="test-buttons" id="testButtons" style="display: none;">
+            <button class="test-button" onclick="testQuality('1080p')">Test 1080p</button>
+            <button class="test-button" onclick="testQuality('720p')">Test 720p</button>
+            <button class="test-button" onclick="testQuality('480p')">Test 480p</button>
+            <button class="test-button" onclick="testQuality('360p')">Test 360p</button>
+        </div>
+        
+        <div id="videoContainer" style="display: none;">
+            <video id="testVideo" controls muted autoplay>
+                Your browser does not support the video tag.
+            </video>
+        </div>
+    </div>
+
+    <script>
+        let currentStream = '';
+        let availableQualities = [];
+
+        async function loadStream() {
+            const streamName = document.getElementById('streamName').value.trim();
+            if (!streamName) {
+                setStatus('❌ Please enter a stream name', 'error');
+                return;
+            }
+
+            currentStream = streamName;
+            setStatus('🔍 Analyzing stream: ' + streamName, 'loading');
+
+            try {
+                // Check if stream is active
+                const activeResponse = await fetch('/api/transcode/active');
+                const activeData = await activeResponse.json();
+                
+                const streamData = activeData.data?.find(s => s.stream_key === streamName);
+                
+                if (!streamData) {
+                    setStatus('❌ Stream "' + streamName + '" is not active. Available streams: ' + 
+                             (activeData.data?.map(s => s.stream_key).join(', ') || 'None'), 'error');
+                    return;
+                }
+
+                // Get detailed stream info
+                const statusResponse = await fetch(`/api/transcode/status/${streamName}`);
+                const statusData = await statusResponse.json();
+
+                if (statusData.success) {
+                    displayStreamInfo(statusData.data);
+                    await loadMasterPlaylist(streamName);
+                } else {
+                    setStatus('❌ Failed to get stream details: ' + statusData.error, 'error');
+                }
+
+            } catch (error) {
+                setStatus('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function loadMasterPlaylist(streamName) {
+            try {
+                const response = await fetch(`/hls/${streamName}/master.m3u8`);
+                const playlistText = await response.text();
+                
+                if (response.ok) {
+                    parsePlaylist(playlistText, streamName);
+                } else {
+                    setStatus('❌ Failed to load master playlist: ' + playlistText, 'error');
+                }
+            } catch (error) {
+                setStatus('❌ Error loading playlist: ' + error.message, 'error');
+            }
+        }
+
+        function displayStreamInfo(data) {
+            const qualityCount = data.qualities?.length || 0;
+            const uptime = Math.floor(data.uptime_seconds / 60);
+            
+            setStatus(`✅ Stream Active - ${qualityCount} quality variants available (${uptime}m uptime)`, 'success');
+            
+            // Display quality cards
+            const qualityInfo = document.getElementById('qualityInfo');
+            qualityInfo.innerHTML = '';
+            
+            if (data.qualities) {
+                availableQualities = data.qualities;
+                data.qualities.forEach(quality => {
+                    const card = document.createElement('div');
+                    card.className = 'quality-card';
+                    card.innerHTML = `
+                        <h3>${quality.name}</h3>
+                        <div class="bandwidth">Bitrate: ${quality.bitrate}</div>
+                        <div class="resolution">Resolution: ${quality.resolution}</div>
+                        <div class="codecs">URL: ${quality.url}</div>
+                    `;
+                    qualityInfo.appendChild(card);
+                });
+            }
+            
+            // Show test buttons
+            document.getElementById('testButtons').style.display = 'flex';
+        }
+
+        function parsePlaylist(playlistText, streamName) {
+            const lines = playlistText.split('\n');
+            const variants = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith('#EXT-X-STREAM-INF:')) {
+                    const info = lines[i];
+                    const url = lines[i + 1];
+                    
+                    // Extract bandwidth and resolution
+                    const bandwidthMatch = info.match(/BANDWIDTH=(\d+)/);
+                    const resolutionMatch = info.match(/RESOLUTION=(\d+x\d+)/);
+                    const codecsMatch = info.match(/CODECS="([^"]+)"/);
+                    
+                    if (bandwidthMatch && url) {
+                        const bandwidth = parseInt(bandwidthMatch[1]);
+                        const resolution = resolutionMatch ? resolutionMatch[1] : 'Unknown';
+                        const codecs = codecsMatch ? codecsMatch[1] : 'Unknown';
+                        
+                        // Determine quality name from URL
+                        const qualityName = url.includes('1080p') ? '1080p' :
+                                          url.includes('720p') ? '720p' :
+                                          url.includes('480p') ? '480p' :
+                                          url.includes('360p') ? '360p' : 'Unknown';
+                        
+                        variants.push({
+                            name: qualityName,
+                            bandwidth: bandwidth,
+                            resolution: resolution,
+                            codecs: codecs,
+                            url: url.trim(),
+                            fullUrl: `http://localhost:8085/hls/${streamName}/${url.trim()}`
+                        });
+                    }
+                }
+            }
+            
+            displayPlaylistInfo(variants);
+        }
+
+        function displayPlaylistInfo(variants) {
+            // Update quality cards with playlist data
+            const qualityInfo = document.getElementById('qualityInfo');
+            qualityInfo.innerHTML = '';
+            
+            variants.forEach(variant => {
+                const card = document.createElement('div');
+                card.className = 'quality-card';
+                card.innerHTML = `
+                    <h3>${variant.name}</h3>
+                    <div class="bandwidth">Bandwidth: ${(variant.bandwidth / 1000000).toFixed(1)} Mbps</div>
+                    <div class="resolution">Resolution: ${variant.resolution}</div>
+                    <div class="codecs">Codecs: ${variant.codecs}</div>
+                `;
+                qualityInfo.appendChild(card);
+            });
+            
+            // Show URLs
+            const streamUrls = document.getElementById('streamUrls');
+            const urlList = document.getElementById('urlList');
+            urlList.innerHTML = '';
+            
+            variants.forEach(variant => {
+                const urlItem = document.createElement('div');
+                urlItem.className = 'url-item';
+                urlItem.innerHTML = `<strong>${variant.name}:</strong> ${variant.fullUrl}`;
+                urlItem.onclick = () => {
+                    navigator.clipboard.writeText(variant.fullUrl);
+                    setStatus('📋 URL copied to clipboard!', 'success');
+                };
+                urlList.appendChild(urlItem);
+            });
+            
+            streamUrls.style.display = 'block';
+            
+            // Highlight if 1080p is available
+            const has1080p = variants.some(v => v.name === '1080p');
+            if (has1080p) {
+                setStatus('🎉 1080p Quality Available! Master playlist contains all quality variants.', 'success');
+            }
+        }
+
+        async function testQuality(quality) {
+            if (!currentStream) {
+                setStatus('❌ No stream selected', 'error');
+                return;
+            }
+
+            const videoContainer = document.getElementById('videoContainer');
+            const video = document.getElementById('testVideo');
+            
+            // Construct the URL
+            const url = `http://localhost:8085/hls/${currentStream}/${quality}/playlist.m3u8`;
+            
+            setStatus(`🎬 Testing ${quality} quality...`, 'loading');
+            
+            // Show current quality
+            const currentQuality = document.getElementById('currentQuality');
+            const currentQualityText = document.getElementById('currentQualityText');
+            currentQualityText.textContent = `Testing ${quality.toUpperCase()}`;
+            currentQuality.style.display = 'block';
+            
+            // Update current stats
+            const currentStats = document.getElementById('currentStats');
+            currentStats.innerHTML = `
+                <div>Stream: ${currentStream}</div>
+                <div>URL: ${url}</div>
+                <div>Status: Loading...</div>
+            `;
+            
+            // Show video container
+            videoContainer.style.display = 'block';
+            
+            // Set video source
+            video.src = url;
+            
+            // Handle video events
+            video.onloadstart = () => {
+                currentStats.innerHTML = `
+                    <div>Stream: ${currentStream}</div>
+                    <div>Quality: ${quality.toUpperCase()}</div>
+                    <div>Status: Loading stream...</div>
+                `;
+            };
+            
+            video.onloadedmetadata = () => {
+                currentStats.innerHTML = `
+                    <div>Stream: ${currentStream}</div>
+                    <div>Quality: ${quality.toUpperCase()}</div>
+                    <div>Resolution: ${video.videoWidth}x${video.videoHeight}</div>
+                    <div>Status: ✅ Stream loaded successfully!</div>
+                `;
+                setStatus(`✅ ${quality} stream loaded! Resolution: ${video.videoWidth}x${video.videoHeight}`, 'success');
+                
+                // Highlight the active quality card
+                document.querySelectorAll('.quality-card').forEach(card => {
+                    card.classList.remove('active');
+                    if (card.querySelector('h3').textContent === quality) {
+                        card.classList.add('active');
+                    }
+                });
+            };
+            
+            video.onerror = (e) => {
+                currentStats.innerHTML = `
+                    <div>Stream: ${currentStream}</div>
+                    <div>Quality: ${quality.toUpperCase()}</div>
+                    <div>Status: ❌ Error loading stream</div>
+                `;
+                setStatus(`❌ Failed to load ${quality} stream. This quality may not be available.`, 'error');
+            };
+        }
+
+        async function refreshData() {
+            if (currentStream) {
+                await loadStream();
+            } else {
+                setStatus('🔄 Enter a stream name to test', 'info');
+            }
+        }
+
+        function setStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.background = 
+                type === 'error' ? 'rgba(220, 53, 69, 0.3)' :
+                type === 'success' ? 'rgba(40, 167, 69, 0.3)' :
+                type === 'loading' ? 'rgba(255, 193, 7, 0.3)' :
+                'rgba(255, 255, 255, 0.2)';
+        }
+
+        // Auto-load stream1 on page load
+        window.onload = () => {
+            loadStream();
+        };
+    </script>
+</body>
+</html>
