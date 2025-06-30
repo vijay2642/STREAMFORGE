@@ -47,8 +47,9 @@ type Manager struct {
 
 // NewManager creates a new transcoder manager with comprehensive initialization
 func NewManager(rtmpURL, outputDir string) *Manager {
-	// Define quality profiles matching working configuration
+	// Define quality profiles with 1080p support for high-quality streaming
 	qualities := []Quality{
+		{Name: "1080p", Resolution: "1920x1080", VideoBitrate: "5000k", MaxBitrate: "5500k", BufSize: "10000k"},
 		{Name: "720p", Resolution: "1280x720", VideoBitrate: "2800k", MaxBitrate: "3000k", BufSize: "2800k"},
 		{Name: "480p", Resolution: "854x480", VideoBitrate: "1400k", MaxBitrate: "1500k", BufSize: "1400k"},
 		{Name: "360p", Resolution: "640x360", VideoBitrate: "800k", MaxBitrate: "900k", BufSize: "800k"},

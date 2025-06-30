@@ -37,16 +37,18 @@ log "DEBUG: Script called with args: $*"
 STREAM_DIR="$HLS_BASE_DIR/$STREAM_NAME"
 log "INFO: Creating directory structure for stream: $STREAM_NAME"
 
-# Create all necessary directories
-mkdir -p "$STREAM_DIR"/{720p,480p,360p}
+# Create all necessary directories including 1080p
+mkdir -p "$STREAM_DIR"/{1080p,720p,480p,360p}
 
 # Set proper permissions - make writable by all
 chmod -R 777 "$STREAM_DIR"
 
-# Create master playlist template
+# Create master playlist template with 1080p support
 cat > "$STREAM_DIR/master.m3u8" << EOF
 #EXTM3U
 #EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=5500000,RESOLUTION=1920x1080,CODECS="avc1.640028,mp4a.40.2"
+1080p/playlist.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=2996000,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
 720p/playlist.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=1498000,RESOLUTION=854x480,CODECS="avc1.64001e,mp4a.40.2"
